@@ -1,0 +1,13 @@
+node_modules/
+dist/
+dist-package/
+data/
+*.log
+*.tmp
+.serena/
+.claude/
+.env
+.env.*
+*.zip
+.DS_Store
+Thumbs.db

@@ -1,0 +1,26 @@
+{
+  "name": "ornelyon",
+  "version": "0.4.1",
+  "description": "ORNELYON: a small local harness for running Codex, Claude Code and OpenAI-compatible local LLMs from one CLI and an optional local setup screen.",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "ornelyon": "dist/interface/cli.js",
+    "chimera": "dist/interface/cli.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "npm run build && node scripts/run-tests.mjs",
+    "start": "node dist/interface/cli.js gui",
+    "package": "node scripts/package.mjs"
+  },
+  "devDependencies": {
+    "@modelcontextprotocol/sdk": "^1.32.2",
+    "@types/node": "^20.19.0",
+    "typescript": "^5.9.3"
+  }
+}

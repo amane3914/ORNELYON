@@ -1,0 +1,805 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ORNELYON Setup</title>
+<style>
+  :root { --bg:#f6f7f9; --fg:#1d2330; --muted:#5b6475; --card:#fff; --line:#dde1e8; --accent:#3b5bdb; --ok:#2b8a3e; --warn:#b7791f; --err:#c92a2a; }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) { --bg:#14171d; --fg:#e6e9ef; --muted:#9aa3b2; --card:#1d222b; --line:#2e3642; --accent:#7c9bff; --ok:#5fd17a; --warn:#f0b35a; --err:#ff8787; }
+  }
+  :root[data-theme="dark"] { --bg:#14171d; --fg:#e6e9ef; --muted:#9aa3b2; --card:#1d222b; --line:#2e3642; --accent:#7c9bff; --ok:#5fd17a; --warn:#f0b35a; --err:#ff8787; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg); font:15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  header { display:flex; align-items:center; gap:16px; padding:14px 20px; border-bottom:1px solid var(--line); background:var(--card); flex-wrap:wrap; }
+  header h1 { font-size:18px; margin:0; }
+  nav { display:flex; gap:4px; flex-wrap:wrap; }
+  nav button { background:none; border:1px solid transparent; color:var(--muted); padding:6px 10px; border-radius:6px; cursor:pointer; font:inherit; }
+  nav button.active { color:var(--fg); border-color:var(--line); background:var(--bg); }
+  main { max-width:960px; margin:0 auto; padding:20px 16px 60px; }
+  section.card { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:18px; margin-bottom:16px; }
+  h2 { font-size:17px; margin:0 0 10px; }
+  h3 { font-size:15px; margin:14px 0 6px; }
+  label { display:block; margin:8px 0 4px; color:var(--muted); font-size:13px; }
+  input, select, textarea { width:100%; padding:8px 10px; border:1px solid var(--line); border-radius:6px; background:var(--bg); color:var(--fg); font:inherit; }
+  textarea { min-height:120px; resize:vertical; font-family: ui-monospace, Consolas, monospace; }
+  .row { display:grid; grid-template-columns: repeat(auto-fit, minmax(180px,1fr)); gap:12px; align-items:end; }
+  .check { display:flex; align-items:center; gap:8px; margin:6px 0; color:var(--fg); }
+  .check input { width:auto; }
+  button.primary, button.secondary, button.danger { font:inherit; padding:8px 14px; border-radius:6px; cursor:pointer; border:1px solid var(--accent); }
+  button.primary { background:var(--accent); color:#fff; }
+  button.secondary { background:var(--card); color:var(--fg); }
+  button.danger { background:var(--card); color:var(--err); border-color:var(--err); }
+  button:disabled { opacity:.5; cursor:not-allowed; }
+  .actions { display:flex; gap:8px; flex-wrap:wrap; margin-top:14px; }
+  .pill { display:inline-block; font-size:12px; padding:2px 8px; border-radius:999px; border:1px solid var(--line); color:var(--muted); }
+  .ok { color:var(--ok); } .warn { color:var(--warn); } .err { color:var(--err); } .muted { color:var(--muted); }
+  .check-item { border-top:1px solid var(--line); padding:8px 0; }
+  .check-item:first-child { border-top:none; }
+  pre { white-space:pre-wrap; word-break:break-word; background:var(--bg); border:1px solid var(--line); border-radius:6px; padding:10px; margin:8px 0 0; font:13px/1.45 ui-monospace, Consolas, monospace; max-height:420px; overflow:auto; }
+  table { width:100%; border-collapse:collapse; font-size:14px; }
+  th, td { text-align:left; padding:6px 8px; border-bottom:1px solid var(--line); vertical-align:top; }
+  .notice { border-left:3px solid var(--warn); padding:8px 12px; background:var(--bg); border-radius:4px; margin:10px 0; }
+  .hidden { display:none !important; }
+  .agent-box { border:1px solid var(--line); border-radius:8px; padding:12px; margin-top:10px; }
+  @media (max-width: 600px) { main { padding:14px 12px 40px; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>ORNELYON</h1>
+  <p class="muted">Local harness for Codex, Claude Code and local LLMs. Previously named CHIMERA Harness. (v0.3.1)</p>
+  <nav id="nav">
+    <button data-tab="setup">Setup</button>
+    <button data-tab="task">Task</button>
+    <button data-tab="runs">Runs</button>
+    <button data-tab="agents">Agents</button>
+    <button data-tab="cost">Cost</button>
+    <button data-tab="advanced">Advanced</button>
+  </nav>
+  <span class="muted" id="sysinfo" style="margin-left:auto"></span>
+</header>
+<main>
+  <!-- SETUP -->
+  <div id="tab-setup" class="tab">
+    <section class="card">
+      <h2>Setup</h2>
+      <p class="muted">Choose an install preset, pick your main AI, and check the requirements. Nothing is saved as complete until every check passes.</p>
+      <div id="setup-notice"></div>
+      <h3>Environment</h3>
+      <div id="env-info" class="muted"></div>
+      <h3>Install preset</h3>
+      <div class="row">
+        <button class="secondary" data-preset="lite">Lite — single agent</button>
+        <button class="secondary" data-preset="standard">Standard — multi-AI, manual switch</button>
+        <button class="secondary" data-preset="research">Research — adds auto routing</button>
+      </div>
+      <p class="muted">A preset sets starting values only. You can change everything below afterwards.</p>
+    </section>
+    <section class="card">
+      <h2>Agents and settings</h2>
+      <div id="settings-form-setup"></div>
+    </section>
+    <section class="card">
+      <h2>Checks</h2>
+      <div class="actions">
+        <button class="secondary" id="btn-check">Run checks</button>
+        <button class="primary" id="btn-complete">Complete setup</button>
+      </div>
+      <div id="checks-setup" style="margin-top:12px"></div>
+    </section>
+  </div>
+
+  <!-- TASK -->
+  <div id="tab-task" class="tab hidden">
+    <section class="card">
+      <h2>Run a task</h2>
+      <label for="t-prompt">Prompt</label>
+      <textarea id="t-prompt" placeholder="Describe what you want the agent to do."></textarea>
+      <div class="row" style="margin-top:10px">
+        <div><label for="t-agent">Agent</label>
+          <select id="t-agent"><option value="">Default (main agent / routing)</option><option value="codex">Codex</option><option value="claude">Claude Code</option><option value="local">Local LLM</option></select></div>
+        <div><label for="t-kind">Task kind (for routing)</label><input id="t-kind" list="kinds" placeholder="e.g. code, text"><datalist id="kinds"><option value="code"><option value="text"><option value="review"></datalist></div>
+        <div><label for="t-cwd">Folder inside workspace</label><input id="t-cwd" placeholder="(workspace root)"></div>
+        <div><label for="t-sandbox">Sandbox</label>
+          <select id="t-sandbox"><option value="read-only">read-only (safe default)</option><option value="workspace-write">workspace-write</option></select></div>
+        <div><label for="t-timeout">Timeout (seconds)</label><input id="t-timeout" type="number" min="5" max="3600" value="600"></div>
+      </div>
+      <div class="notice muted" id="t-mode-note">Mode and call limits come from your Agent settings.</div>
+      <div class="actions">
+        <button class="primary" id="btn-run">Run</button>
+        <button class="danger hidden" id="btn-cancel">Stop</button>
+      </div>
+      <div id="t-status" style="margin-top:12px"></div>
+    </section>
+  </div>
+
+  <!-- RUNS -->
+  <div id="tab-runs" class="tab hidden">
+    <section class="card">
+      <h2>Run history</h2>
+      <div class="actions"><button class="secondary" id="btn-refresh-runs">Refresh</button></div>
+      <div id="runs-note"></div>
+      <div style="overflow:auto"><table><thead><tr><th>Time</th><th>Mode</th><th>Role</th><th>Agent</th><th>Status</th><th>Error</th><th>Execution</th><th>Verification</th><th>Acceptance</th><th>Decide</th><th>Passport</th><th>Prompt</th></tr></thead><tbody id="runs-body"></tbody></table></div>
+    </section>
+  </div>
+
+  <!-- AGENTS -->
+  <div id="tab-agents" class="tab hidden">
+    <section class="card">
+      <h2>Agent status</h2>
+      <div id="agent-status"></div>
+      <div class="actions"><button class="secondary" id="btn-redetect">Check again</button></div>
+      <h3>Optional plugin</h3>
+      <div id="token-economizer"></div>
+    </section>
+    <section class="card" id="card-dispatch">
+      <h2>Smart Dispatch</h2>
+      <div id="dispatch-box"></div>
+    </section>
+    <section class="card">
+      <h2>Agent settings</h2>
+      <div id="settings-form-agents"></div>
+    </section>
+  </div>
+
+  <!-- COST -->
+  <div id="tab-cost" class="tab hidden">
+    <section class="card">
+      <h2>Usage and cost (last 24 hours)</h2>
+      <p class="muted">Only values that an agent reported are shown. Missing values appear as <b>unknown</b>. ORNELYON never estimates prices.</p>
+      <div style="overflow:auto"><table><thead><tr><th>Agent</th><th>Runs</th><th>Succeeded</th><th>Failed</th><th>Input tokens</th><th>Output tokens</th><th>Reported cost</th><th>Total time</th></tr></thead><tbody id="cost-body"></tbody></table></div>
+    </section>
+  </div>
+
+  <!-- ADVANCED -->
+  <div id="tab-advanced" class="tab hidden">
+    <section class="card">
+      <h2>Tools (dormancy)</h2>
+      <p class="muted">Tools are never deleted. DORMANT, QUARANTINED and DISABLED tools are removed from requests to Local LLM and are passed to Claude Code as disallowed. Codex CLI has no per-tool switch, so it is not affected.</p>
+      <div id="tools-list"></div>
+      <div class="row" style="margin-top:12px">
+        <div><label for="new-tool-name">Tool name</label><input id="new-tool-name" placeholder="e.g. WebFetch"></div>
+        <div><label for="new-tool-desc">Description</label><input id="new-tool-desc" placeholder="What it does"></div>
+      </div>
+      <div class="actions"><button class="secondary" id="btn-add-tool">Add tool</button></div>
+    </section>
+    <section class="card">
+      <h2>Raw configuration</h2>
+      <p class="muted">Edit with care. Saving validates the file and keeps the previous version as <code>config.json.bak</code>.</p>
+      <textarea id="raw-config" style="min-height:300px"></textarea>
+      <div class="actions">
+        <button class="secondary" id="btn-raw-reload">Reload</button>
+        <button class="primary" id="btn-raw-save">Save raw configuration</button>
+      </div>
+      <div id="raw-msg"></div>
+    </section>
+  </div>
+</main>
+
+<script>
+(() => {
+  'use strict';
+  const TOKEN = '__CHIMERA_TOKEN__';
+  let cfg = null;          // current saved config
+  let draft = null;        // editable copy used by the settings forms
+  let system = null;
+  let activeRun = null;    // groupId of the task being watched
+  let pollTimer = null;
+
+  const $ = (id) => document.getElementById(id);
+  const el = (tag, props = {}, children = []) => {
+    const node = document.createElement(tag);
+    for (const [k, v] of Object.entries(props)) {
+      if (k === 'class') node.className = v;
+      else if (k === 'text') node.textContent = v;
+      else if (k.startsWith('on')) node.addEventListener(k.slice(2), v);
+      else node.setAttribute(k, v);
+    }
+    for (const c of [].concat(children)) if (c !== null && c !== undefined) node.append(c);
+    return node;
+  };
+
+  async function api(path, opts = {}) {
+    const res = await fetch(path, {
+      method: opts.method || 'GET',
+      headers: { 'x-chimera-token': TOKEN, ...(opts.body ? { 'content-type': 'application/json' } : {}) },
+      body: opts.body ? JSON.stringify(opts.body) : undefined,
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      const err = new Error(data.error || ('HTTP ' + res.status));
+      err.data = data;
+      throw err;
+    }
+    return data;
+  }
+
+  function showTab(name) {
+    document.querySelectorAll('.tab').forEach((t) => t.classList.toggle('hidden', t.id !== 'tab-' + name));
+    document.querySelectorAll('#nav button').forEach((b) => b.classList.toggle('active', b.dataset.tab === name));
+    if (name === 'runs') loadRuns();
+    if (name === 'cost') loadCost();
+    if (name === 'agents') loadStatus();
+    if (name === 'advanced') { renderTools(); loadRawConfig(); }
+    if (name === 'task') renderTaskDefaults();
+  }
+  document.querySelectorAll('#nav button').forEach((b) => b.addEventListener('click', () => showTab(b.dataset.tab)));
+
+  function statusClass(s) { return s === 'ok' ? 'ok' : s === 'warn' ? 'warn' : 'err'; }
+
+  function renderChecks(target, checks) {
+    target.replaceChildren();
+    for (const c of checks) {
+      target.append(el('div', { class: 'check-item' }, [
+        el('div', {}, [el('span', { class: statusClass(c.status), text: (c.status === 'ok' ? '✓ ' : c.status === 'warn' ? '! ' : '✗ ') }), el('b', { text: c.label })]),
+        el('div', { class: 'muted', text: c.detail }),
+        c.fix ? el('div', { class: 'notice', text: 'How to fix: ' + c.fix }) : null,
+      ]));
+    }
+  }
+
+  // ----- settings form (shared by Setup and Agents) -----
+  function settingsForm(container) {
+    container.replaceChildren();
+    const d = draft;
+    const multiBox = el('input', { type: 'checkbox', id: 'f-multi', ...(d.multiAi.enabled ? { checked: '' } : {}) });
+    multiBox.addEventListener('change', () => { d.multiAi.enabled = multiBox.checked; settingsForm(container); });
+
+    const mainSel = el('select', { id: 'f-main' }, ['codex', 'claude', 'local'].map((k) => el('option', { value: k, text: label(k), ...(d.multiAi.mainAgent === k ? { selected: '' } : {}) })));
+    mainSel.addEventListener('change', () => { d.multiAi.mainAgent = mainSel.value; });
+
+    const subBox = el('input', { type: 'checkbox', ...(d.allowSubagents ? { checked: '' } : {}) });
+    subBox.addEventListener('change', () => { d.allowSubagents = subBox.checked; });
+
+    container.append(
+      el('label', { for: 'f-main', text: 'Main AI' }), mainSel,
+      el('div', { class: 'check' }, [multiBox, el('span', { text: 'Enable multi-AI (use more than one agent)' })]),
+      el('div', { class: 'check' }, [subBox, el('span', { text: 'Allow agents to start their own sub-agents (off by default; Claude Code and Codex enforce it differently, see Architecture)' })]),
+    );
+
+    if (!d.multiAi.enabled) {
+      container.append(el('p', { class: 'muted', text: 'Single-agent mode. Other agents are hidden and are not loaded.' }));
+    } else {
+      const modeSel = el('select', { id: 'f-mode' }, [
+        ['manual', 'Manual switch — you pick the agent'],
+        ['review', 'Mutual review — another agent checks the answer'],
+        ['auto', 'Automatic routing — by declared capability, priority and budget'],
+      ].map(([v, t]) => el('option', { value: v, text: t, ...(d.multiAi.mode === v ? { selected: '' } : {}) })));
+      modeSel.addEventListener('change', () => { d.multiAi.mode = modeSel.value; });
+      container.append(el('label', { for: 'f-mode', text: 'Collaboration mode' }), modeSel);
+      container.append(el('div', { class: 'row' }, [
+        numberField('Max agent calls per task', d.multiAi.maxCalls, 1, 10, (v) => d.multiAi.maxCalls = v),
+        numberField('Max nested depth (agent calls inside agent calls)', d.multiAi.maxDepth, 0, 3, (v) => d.multiAi.maxDepth = v),
+        numberField('Max handoffs (manual handoffs in a row)', d.multiAi.maxHandoffs, 0, 5, (v) => d.multiAi.maxHandoffs = v),
+        numberField('Retries per agent', d.optimization.loopGuard.maxRetries, 0, 5, (v) => d.optimization.loopGuard.maxRetries = v),
+      ]));
+    }
+
+    const agentBlocks = [['codex', 'OpenAI Codex (codex exec)'], ['claude', 'Claude Code (claude -p)'], ['local', 'Local LLM (OpenAI-compatible)']];
+    for (const [key, title] of agentBlocks) {
+      if (!d.multiAi.enabled && key !== d.multiAi.mainAgent) continue;
+      const a = d.agents[key];
+      const enabled = el('input', { type: 'checkbox', ...(a.enabled ? { checked: '' } : {}) });
+      enabled.addEventListener('change', () => { a.enabled = enabled.checked; });
+      const box = el('div', { class: 'agent-box' }, [
+        el('div', { class: 'check' }, [enabled, el('b', { text: title })]),
+        el('div', { class: 'row' }, [
+          textField('Capabilities (comma separated)', (a.capabilities || []).join(', '), (v) => a.capabilities = v.split(',').map((s) => s.trim()).filter(Boolean)),
+          numberField('Priority (1 = first)', a.priority, 1, 99, (v) => a.priority = v),
+          numberField('Daily budget USD (blank = none)', a.budgetUsd ?? '', 0, 100000, (v) => a.budgetUsd = v === '' ? null : v, true),
+          numberField('Timeout (seconds)', a.timeoutSec, 5, 3600, (v) => a.timeoutSec = v),
+        ]),
+        textField('Model (blank = agent default)', a.model ?? '', (v) => a.model = v.trim() === '' ? null : v.trim()),
+      ]);
+      if (key !== 'local') {
+        box.append(textField('Executable path (optional, absolute; use when several installs exist)', a.executable ?? '', (v) => a.executable = v.trim() === '' ? null : v.trim()));
+      }
+      if (key === 'local') {
+        box.append(
+          textField('Base URL', a.baseUrl, (v) => a.baseUrl = v.trim()),
+          textField('API key environment variable name (optional, the key is never stored)', a.apiKeyEnv ?? '', (v) => a.apiKeyEnv = v.trim() === '' ? null : v.trim()),
+        );
+      }
+      container.append(box);
+    }
+
+    const workspace = textField('Workspace folder (agents may only work inside it)', d.workspaceRoot, (v) => d.workspaceRoot = v.trim());
+    container.append(workspace);
+    container.append(el('div', { class: 'actions' }, [
+      el('button', { class: 'primary', text: 'Save settings', onclick: () => saveDraft(container) }),
+      el('button', { class: 'secondary', text: 'Discard changes', onclick: () => { draft = structuredClone(cfg); settingsForm(container); } }),
+    ]));
+    container.append(el('div', { class: 'save-msg' }));
+  }
+
+  function label(k) { return k === 'codex' ? 'OpenAI Codex' : k === 'claude' ? 'Claude Code' : 'Local LLM'; }
+  function textField(title, value, onChange) {
+    const input = el('input', { value: value });
+    input.addEventListener('input', () => onChange(input.value));
+    return el('div', {}, [el('label', { text: title }), input]);
+  }
+  function numberField(title, value, min, max, onChange, allowBlank = false) {
+    const input = el('input', { type: 'number', min: String(min), max: String(max), value: String(value ?? '') });
+    input.addEventListener('input', () => {
+      if (allowBlank && input.value === '') { onChange(''); return; }
+      const n = Number(input.value);
+      if (Number.isFinite(n)) onChange(n);
+    });
+    return el('div', {}, [el('label', { text: title }), input]);
+  }
+
+  function showMsg(id, text, ok) {
+    const node = $(id);
+    if (!node) return;
+    node.replaceChildren(el('div', { class: ok ? 'notice ok' : 'notice err', text }));
+  }
+
+  // The message is written into the form that was saved, so a save on Setup never shows on Agents.
+  async function saveDraft(container) {
+    const say = (text, ok) => {
+      const m = container.querySelector('.save-msg');
+      if (m) m.replaceChildren(el('div', { class: ok ? 'notice ok' : 'notice err', text }));
+    };
+    try {
+      const res = await api('/api/config', { method: 'PUT', body: { config: draft } });
+      cfg = res.config;
+      draft = structuredClone(cfg);
+      await loadStatus();
+      say('Settings saved.', true);
+    } catch (err) {
+      say('Not saved: ' + err.message, false);
+    }
+  }
+
+  // ----- setup page -----
+  async function loadStatus() {
+    const s = await api('/api/status');
+    system = s.system;
+    cfg = s.config;
+    draft = structuredClone(cfg);
+    $('sysinfo').textContent = `${system.osLabel} · ${system.arch} · Node ${system.nodeVersion}`;
+    $('env-info').textContent = `Detected: ${system.osLabel} (${system.platform}). Config source: ${s.configSource}.`;
+    if (s.configWarnings.length) showMsg('setup-notice', s.configWarnings.join(' '), false);
+    settingsForm($('settings-form-setup'));
+    settingsForm($('settings-form-agents'));
+    renderDispatch($('dispatch-box'));
+    renderChecks($('checks-setup'), s.checks);
+    renderAgentStatus(s.detections, s.config);
+    renderTokenEconomizer(s.tokenEconomizer || [], s.harness2);
+    if (!cfg.setupCompleted) showMsg('setup-notice', 'Setup is not complete yet. Run the checks, fix any errors, then complete setup.', false);
+    else showMsg('setup-notice', 'Setup is complete. You can change settings at any time.', true);
+    return s;
+  }
+
+  function renderAgentStatus(det, config) {
+    const box = $('agent-status');
+    box.replaceChildren();
+    for (const key of ['codex', 'claude', 'local']) {
+      const d = det[key];
+      const state = !d.installed ? 'Not found' : d.authenticated === false ? 'Not signed in' : d.authenticated === true ? 'Ready' : 'Reachable';
+      const cls = !d.installed || d.authenticated === false ? 'err' : 'ok';
+      box.append(el('div', { class: 'check-item' }, [
+        el('div', {}, [el('b', { text: label(key) + ' ' }), el('span', { class: cls, text: '— ' + state }), key === config.multiAi.mainAgent ? el('span', { class: 'pill', text: 'main', style: 'margin-left:8px' }) : null]),
+        el('div', { class: 'muted', text: (d.version ? 'Version: ' + d.version + '. ' : '') + d.authNote }),
+      ]));
+    }
+  }
+
+  // Read-only view of the optional Microsoft TokenEconomizer plugin. ORNELYON never installs it.
+  function renderTokenEconomizer(items, h2) {
+    const box = $('token-economizer');
+    box.replaceChildren();
+    if (h2) {
+      const ok = h2.state === 'AVAILABLE';
+      box.append(el('div', { class: 'check-item' }, [
+        el('div', {}, [el('b', { text: 'Google Harness² (Research backend, optional) ' }), el('span', { class: ok ? 'ok' : 'err', text: '— ' + h2.state })]),
+        el('div', { class: 'muted', text: h2.reason + ' Checks: ' + h2.checks.map((c) => c.name + (c.ok ? ' ok' : ' missing')).join(', ') + '.' }),
+      ]));
+    }
+    box.append(el('div', { class: 'muted', text: 'Optional plugin (Microsoft TokenEconomizer). It runs inside each agent\'s own session. ORNELYON only reads whether it is configured; it does not install or change it.' }));
+    for (const t of items) {
+      const state = t.pluginFound ? 'Plugin found' : 'Not configured';
+      const cls = t.pluginFound && t.versionStatus === 'outside_supported' ? 'err' : 'ok';
+      box.append(el('div', { class: 'check-item' }, [
+        el('div', {}, [el('b', { text: label(t.agent) + ' ' }), el('span', { class: cls, text: '— ' + state })]),
+        el('div', { class: 'muted', text: (t.agentVersion ? 'Agent version: ' + t.agentVersion + '. ' : '') + 'Listed supported range: ' + t.supportedRange + '. ' + t.note }),
+      ]));
+    }
+  }
+
+  document.querySelectorAll('[data-preset]').forEach((b) => b.addEventListener('click', async () => {
+    try {
+      const res = await api('/api/setup/preset', { method: 'POST', body: { preset: b.dataset.preset } });
+      cfg = res.config;
+      draft = structuredClone(cfg);
+      settingsForm($('settings-form-setup'));
+      settingsForm($('settings-form-agents'));
+      showMsg('setup-notice', 'Preset applied: ' + b.dataset.preset + '. Review the settings below, then save.', true);
+    } catch (err) { showMsg('setup-notice', err.message, false); }
+  }));
+
+  $('btn-check').addEventListener('click', async () => {
+    const r = await api('/api/setup/check', { method: 'POST', body: {} });
+    renderChecks($('checks-setup'), r.checks);
+  });
+
+  $('btn-complete').addEventListener('click', async () => {
+    try {
+      await api('/api/config', { method: 'PUT', body: { config: draft } });
+      const r = await api('/api/setup/complete', { method: 'POST', body: {} });
+      renderChecks($('checks-setup'), r.checks);
+      showMsg('setup-notice', 'Setup complete. Open the Task tab to run your first task.', true);
+      await loadStatus();
+      showTab('task');
+    } catch (err) {
+      if (err.data && err.data.checks) renderChecks($('checks-setup'), err.data.checks);
+      showMsg('setup-notice', err.message, false);
+    }
+  });
+
+  $('btn-redetect').addEventListener('click', async () => { await api('/api/setup/check', { method: 'POST', body: {} }); await loadStatus(); });
+
+  // ----- task page -----
+  function renderTaskDefaults() {
+    if (!cfg) return;
+    $('t-sandbox').value = cfg.defaultSandbox;
+    const note = cfg.multiAi.enabled
+      ? `Multi-AI on: ${cfg.multiAi.mode} mode, up to ${cfg.multiAi.maxCalls} agent calls per task.`
+      : 'Single-agent mode: only the main agent is used.';
+    $('t-mode-note').textContent = note;
+  }
+
+  $('btn-run').addEventListener('click', async () => {
+    if ($('t-sandbox').value === 'workspace-write' && !confirm('workspace-write lets the agent change files inside the workspace folder. Run with this permission?')) {
+      return;
+    }
+    const body = {
+      prompt: $('t-prompt').value,
+      agent: $('t-agent').value || undefined,
+      kind: $('t-kind').value.trim() || undefined,
+      cwd: $('t-cwd').value.trim() || undefined,
+      sandbox: $('t-sandbox').value,
+      timeoutSec: Number($('t-timeout').value) || 600,
+    };
+    try {
+      const res = await api('/api/tasks', { method: 'POST', body });
+      activeRun = res.groupId;
+      $('btn-run').disabled = true;
+      $('btn-cancel').classList.remove('hidden');
+      $('t-status').replaceChildren(el('div', { class: 'muted', text: 'Running…' }));
+      startPolling();
+    } catch (err) {
+      $('t-status').replaceChildren(el('div', { class: 'notice err', text: err.message }));
+    }
+  });
+
+  $('btn-cancel').addEventListener('click', async () => {
+    if (!activeRun) return;
+    await api('/api/tasks/' + activeRun + '/cancel', { method: 'POST', body: {} }).catch(() => {});
+  });
+
+  function startPolling() {
+    clearInterval(pollTimer);
+    pollTimer = setInterval(pollRun, 1000);
+    pollRun();
+  }
+
+  async function pollRun() {
+    if (!activeRun) return;
+    let run;
+    try { run = await api('/api/tasks/' + activeRun); } catch (err) {
+      clearInterval(pollTimer);
+      $('t-status').replaceChildren(el('div', { class: 'notice err', text: err.message }));
+      return;
+    }
+    const nodes = [el('div', {}, [el('span', { class: 'pill', text: run.status })]), el('pre', { text: run.logs.join('\n') || '(no log yet)' })];
+    if (run.status !== 'running') {
+      clearInterval(pollTimer);
+      $('btn-run').disabled = false;
+      $('btn-cancel').classList.add('hidden');
+      if (run.error) nodes.push(el('div', { class: 'notice err', text: run.error }));
+      if (run.output) {
+        const f = run.output.final;
+        nodes.push(el('h3', { text: `Result — ${f.agent} · ${f.status} · level ${run.output.level}` }));
+        if (f.errorMessage) nodes.push(el('div', { class: 'notice err', text: f.errorMessage }));
+        nodes.push(el('pre', { text: f.output || '(no output)' }));
+        if (run.output.review) nodes.push(el('h3', { text: `Review by ${run.output.review.agent} (${run.output.review.status})` }), el('pre', { text: run.output.review.output || '(no output)' }));
+        for (const n of run.output.notes) nodes.push(el('div', { class: 'notice', text: n }));
+      }
+      activeRun = null;
+    }
+    $('t-status').replaceChildren(...nodes);
+  }
+
+  // ----- Smart Dispatch -----
+  // Settings go through the same config API as everything else. The preview asks the server, which runs the
+  // same dispatch rules as the CLI dry run. Nothing here decides routing and no agent is started.
+  function renderDispatch(box) {
+    box.replaceChildren();
+    const sd = draft.multiAi.smartDispatch;
+    const on = el('input', { type: 'checkbox', id: 'sd-enabled', ...(sd.enabled ? { checked: '' } : {}) });
+    on.addEventListener('change', () => { sd.enabled = on.checked; });
+    const kinds = textField('Critical kinds that always get one independent review (comma separated)', (sd.criticalKinds || []).join(', '), (v) => {
+      sd.criticalKinds = v.split(',').map((x) => x.trim()).filter(Boolean);
+    });
+    box.append(
+      el('p', { class: 'muted', text: 'Off by default. When off, no extra agent is called. A review adds one call that counts toward the call limit and the daily budget.' }),
+    );
+    if (!draft.multiAi.enabled) {
+      box.append(el('div', { class: 'notice', text: 'Multi-AI is off (single-agent mode), so Smart Dispatch has no effect until multi-AI is enabled on Setup.' }));
+    }
+    box.append(el('div', { class: 'check' }, [on, el('span', { text: 'Enable Smart Dispatch' })]), kinds);
+    box.append(el('div', { class: 'actions' }, [el('button', { class: 'primary', id: 'sd-save', text: 'Save Smart Dispatch', onclick: () => saveDraft(box) })]));
+    box.append(el('div', { class: 'save-msg' }));
+
+    const prevKind = el('input', { id: 'sd-kind', placeholder: 'e.g. security (optional)' });
+    const prevReview = el('input', { type: 'checkbox', id: 'sd-review' });
+    const out = el('div', { id: 'sd-preview' });
+    const run = async () => {
+      out.replaceChildren();
+      try {
+        const r = await api('/api/dispatch/plan', { method: 'POST', body: { kind: prevKind.value.trim(), reviewRequested: prevReview.checked } });
+        out.append(
+          el('div', { text: 'Routing policy: ' + r.mode + '; Smart Dispatch ' + (r.smartDispatchEnabled ? 'on' : 'off') }),
+          el('div', { text: 'Selected agent: ' + label(r.selectedAgent) + '   (enabled by priority: ' + r.enabledByPriority.join(' > ') + ')' }),
+          el('div', { text: 'Decision: ' + r.decision.action }),
+          el('div', { text: 'Extra agent call needed: ' + (r.extraCall ? 'yes' : 'no'), class: r.extraCall ? 'warn' : 'ok' }),
+          el('ul', {}, r.decision.reasons.map((x) => el('li', { text: x }))),
+          el('div', { class: 'muted', text: 'Preview only. No agent was started.' }),
+        );
+      } catch (err) { out.append(el('div', { class: 'notice err', text: err.message })); }
+    };
+    box.append(
+      el('h3', { text: 'Preview a decision (starts nothing)' }),
+      el('div', { class: 'row' }, [el('div', {}, [el('label', { text: 'Task kind' }), prevKind]), el('div', { class: 'check' }, [prevReview, el('span', { text: 'Review requested' })])]),
+      el('div', { class: 'actions' }, [el('button', { class: 'secondary', id: 'sd-preview-btn', text: 'Preview', onclick: run })]),
+      out,
+    );
+  }
+
+  // ----- Task Passport and manual handoff -----
+  let runsData = null;
+  let runsFlash = null;   // outcome of the last handoff, kept across the table refresh
+  function passportCell(r) {
+    if (r.role !== 'summary') return el('td', { text: '' });
+    const btn = el('button', { class: 'secondary', text: 'Passport' });
+    btn.addEventListener('click', () => togglePassport(r.groupId, btn.closest('tr')));
+    return el('td', {}, [btn]);
+  }
+
+  async function togglePassport(groupId, row) {
+    const open = row.nextElementSibling;
+    if (open && open.dataset.passportFor === groupId) { open.remove(); return; }
+    const detail = el('td', { colspan: '12' });
+    const tr = el('tr', {}, [detail]);
+    tr.dataset.passportFor = groupId;
+    row.after(tr);
+    await fillPassport(detail, groupId);
+  }
+
+  async function fillPassport(detail, groupId) {
+    detail.replaceChildren(el('span', { class: 'muted', text: 'Loading passport...' }));
+    let data;
+    try {
+      data = await api('/api/passports/' + groupId);
+    } catch (err) {
+      const note = el('span', { class: 'err' });
+      const save = el('button', { class: 'secondary', text: 'Save passport', onclick: async () => {
+        try { await api('/api/passports', { method: 'POST', body: { groupId } }); await fillPassport(detail, groupId); }
+        catch (e) { note.textContent = e.message; }
+      } });
+      detail.replaceChildren(el('div', { text: 'No valid passport is saved for this task. (' + (((err.data && err.data.errors) || []).join('; ') || err.message) + ')' }), save, note);
+      return;
+    }
+    const p = data.passport, h = data.handoff;
+    const kids = (runsData ? runsData.records : []).filter((x) => x.role === 'summary' && (x.notes || []).includes('handoff-from:' + groupId)).map((x) => x.groupId);
+    const lines = [
+      ['Original objective', p.originalObjective === undefined ? 'not recorded (passport saved before v0.3.1)' : (p.originalObjective || 'unknown')],
+      ['Current objective', p.objective],
+      ['Current agent', p.executingAgent || 'unknown'],
+      ['Status', 'execution ' + p.status.execution + ' / verification ' + p.status.verification + ' / acceptance ' + p.status.acceptance],
+      ['Verification checks', p.verifications.length ? p.verifications.map((c) => c.result + ' ' + c.kind + ' ' + c.name).join('; ') : 'none'],
+      ['Open issues', p.openIssues.length ? p.openIssues.join(' | ') : 'none'],
+      ['Next step', p.nextStep],
+      ['Handoff history', h.chain.verified
+        ? 'this task is handoff ' + h.chain.count + ' (at most ' + h.maxHandoffs + ' in a row)' + (h.chain.ancestors.length ? '; came from ' + h.chain.ancestors.map((a) => a.slice(0, 8)).join(' <- ') : '; first task of its chain') + (kids.length ? '; handed on to ' + kids.map((a) => a.slice(0, 8)).join(', ') : '')
+        : 'cannot be verified: ' + h.chain.reason],
+      ['Possible next runs', Object.entries(h.targets).filter(([, t]) => t.allowed).map(([k]) => label(k)).join(', ') || 'none right now'],
+    ];
+    const reportBox = p.agentReport === undefined
+      ? el('div', { class: 'muted', text: 'Previous agent report: not recorded in this passport (saved before v0.3.1). The handoff reads it from history.' })
+      : p.agentReport === null
+        ? el('div', { class: 'muted', text: 'Previous agent report: none (the task produced no output text).' })
+        : el('details', {}, [el('summary', { text: 'Previous agent report (a claim by the agent, ' + p.agentReport.originalChars + ' characters' + (p.agentReport.truncated ? ', copy cut' : '') + ')' }), el('pre', { class: 'ho-report', text: p.agentReport.text })]);
+    const instruction = el('textarea', { class: 'ho-instruction', rows: '3', maxlength: '1000', placeholder: 'Optional instruction for the next agent. Leave empty to use the next step saved in the passport. It cannot change permissions or limits.' });
+    const target = el('select', { class: 'ho-target' }, Object.entries(h.targets).map(([k, t]) => el('option', { value: k, text: label(k) + (t.allowed ? '' : ' - not possible') })));
+    const reason = el('div', { class: 'ho-reason' });
+    const showReason = () => {
+      const t = h.targets[target.value];
+      reason.textContent = t.allowed ? 'Allowed: checks passed (agent enabled and available, capability, budget, handoff limit, files unchanged).' : 'Refused before start: ' + t.refusal;
+      reason.className = 'ho-reason ' + (t.allowed ? 'ok' : 'warn');
+    };
+    const firstAllowed = Object.entries(h.targets).find(([, t]) => t.allowed);
+    if (firstAllowed) target.value = firstAllowed[0];
+    target.addEventListener('change', showReason);
+    showReason();
+    const accept = el('input', { type: 'checkbox', class: 'ho-accept' });
+    const confirm = el('input', { type: 'checkbox', class: 'ho-confirm' });
+    const result = el('div', { class: 'ho-result' });
+    const go = el('button', { class: 'primary ho-go', text: 'Hand off now' });
+    go.addEventListener('click', async () => {
+      result.replaceChildren();
+      if (!confirm.checked) { result.append(el('div', { class: 'notice err', text: 'Tick the confirmation first. A handoff starts an agent.' })); return; }
+      try {
+        const started = await api('/api/handoffs', { method: 'POST', body: { fromGroupId: groupId, to: target.value, acceptCurrentState: accept.checked, confirm: true, instruction: instruction.value.trim() === '' ? undefined : instruction.value } });
+        result.append(el('div', { class: 'muted', text: 'Started task ' + started.groupId + '...' }));
+        for (let i = 0; i < 600; i++) {
+          await new Promise((r) => setTimeout(r, 1000));
+          const st = await api('/api/tasks/' + started.groupId);
+          if (st.status !== 'running') {
+            runsFlash = { ok: st.status === 'done', text: 'Handoff task ' + started.groupId.slice(0, 8) + ' ' + st.status + (st.output ? ': ' + st.output.final.status : '') + (st.error ? ' - ' + st.error : '') };
+            await loadRuns();
+            return;
+          }
+        }
+      } catch (err) { result.replaceChildren(el('div', { class: 'notice err', text: 'Not started: ' + err.message })); }
+    });
+    const preview = el('div', { class: 'ho-preview' });
+    const previewBtn = el('button', { class: 'secondary ho-preview-btn', text: 'Preview what will be sent' });
+    previewBtn.addEventListener('click', async () => {
+      preview.replaceChildren();
+      try {
+        const r = await api('/api/handoffs/preview', { method: 'POST', body: { fromGroupId: groupId, to: target.value, acceptCurrentState: accept.checked, instruction: instruction.value.trim() === '' ? undefined : instruction.value } });
+        if (!r.allowed) { preview.append(el('div', { class: 'notice err', text: 'Refused before start: ' + r.refusal })); return; }
+        const c = r.context;
+        const facts = c.chars + ' characters, sha256 ' + c.sha256.slice(0, 12) + ', report ' + c.report + ', instruction ' + c.instructionSource + (c.truncated.length ? ', cut: ' + c.truncated.join(', ') : '') + (c.missing.length ? ', not available: ' + c.missing.join(', ') : '');
+        preview.append(el('div', { class: 'notice', text: facts }), ...c.warnings.map((w) => el('div', { class: 'notice err', text: w })), el('details', {}, [el('summary', { text: 'Exact text that would be sent' }), el('pre', { class: 'ho-context', text: c.text })]));
+      } catch (err) { preview.append(el('div', { class: 'notice err', text: err.message })); }
+    });
+    detail.replaceChildren(
+      el('table', {}, lines.map(([k, v]) => el('tr', {}, [el('th', { text: k }), el('td', { text: v })]))),
+      reportBox,
+      el('h3', { text: 'Manual handoff (read-only, one new task on the agent you pick)' }),
+      el('div', { class: 'row' }, [el('div', {}, [el('label', { text: 'Hand off to' }), target])]),
+      reason,
+      el('div', {}, [el('label', { text: 'Instruction for the next agent' }), instruction]),
+      el('div', { class: 'actions' }, [previewBtn]),
+      preview,
+      el('div', { class: 'check' }, [accept, el('span', { text: 'Continue even if files changed since the passport was saved' })]),
+      el('div', { class: 'check' }, [confirm, el('span', { text: 'I confirm: this starts the chosen agent now, may use its quota or cost, and runs in read-only mode.' })]),
+      el('div', { class: 'actions' }, [go]),
+      result,
+    );
+  }
+
+  // ----- runs -----
+  // Accept or reject is a user action. The reason is required; an override is only needed when a required check failed or is missing.
+  function decisionCell(groupId) {
+    const reason = el('input', { type: 'text', placeholder: 'reason', maxlength: '500' });
+    const override = el('input', { type: 'checkbox' });
+    const note = el('span', { class: 'muted' });
+    const send = async (action) => {
+      note.textContent = '';
+      try {
+        await api('/api/tasks/decision', { method: 'POST', body: { groupId, action, reason: reason.value, override: override.checked } });
+        await loadRuns();
+      } catch (err) { note.textContent = err.message; }
+    };
+    const accept = el('button', { class: 'secondary', text: 'Accept' });
+    accept.addEventListener('click', () => send('accept'));
+    const reject = el('button', { class: 'secondary', text: 'Reject' });
+    reject.addEventListener('click', () => send('reject'));
+    return el('td', {}, [reason, el('label', { class: 'muted', text: ' override ' }, [override]), accept, reject, note]);
+  }
+
+  async function loadRuns() {
+    const data = await api('/api/history?limit=100');
+    runsData = data;
+    const body = $('runs-body');
+    body.replaceChildren();
+    for (const r of data.records) {
+      const res = r.result;
+      // A task row shows the task's current evidence from the server, so it matches the CLI and never shows
+      // a stale PENDING after a decision. Decision rows show the evidence they recorded.
+      const latest = data.latest || {};
+      const ev = r.role === 'summary' ? (latest[r.groupId] || r.evidence) : r.evidence;
+      const decide = r.role === 'summary' && ev && ev.acceptance === 'PENDING' ? decisionCell(r.groupId) : el('td', { text: '' });
+      body.append(el('tr', {}, [
+        el('td', { text: new Date(r.recordedAt).toLocaleString() }),
+        el('td', { text: r.mode }),
+        el('td', { text: r.role }),
+        el('td', { text: res.agent }),
+        el('td', { text: res.status }),
+        el('td', { text: res.errorMessage ?? '' }),
+        el('td', { text: ev ? ev.execution : '-' }),
+        el('td', { text: ev ? ev.verification : '-', title: ev ? ev.checks.map((c) => c.result + ' ' + c.kind + ' ' + c.name + ': ' + c.detail).join('\n') : '' }),
+        el('td', { text: ev ? ev.acceptance : '-' }),
+        decide,
+        passportCell(r),
+        el('td', { text: r.prompt.slice(0, 120) }),
+      ]));
+    }
+    $('runs-note').replaceChildren(
+      data.skippedLines > 0 ? el('div', { class: 'notice', text: `${data.skippedLines} unreadable history lines were skipped (kept on disk).` }) : el('span'),
+      runsFlash ? el('div', { class: 'notice ' + (runsFlash.ok ? 'ok' : 'err'), id: 'handoff-flash', text: runsFlash.text }) : el('span'),
+    );
+  }
+  $('btn-refresh-runs').addEventListener('click', loadRuns);
+
+  // ----- cost -----
+  async function loadCost() {
+    const data = await api('/api/cost?hours=24');
+    const body = $('cost-body');
+    body.replaceChildren();
+    if (data.agents.length === 0) body.append(el('tr', {}, [el('td', { colspan: '8', class: 'muted', text: 'No runs in the last 24 hours.' })]));
+    const show = (v) => (v === null || v === undefined ? 'unknown' : String(v));
+    for (const a of data.agents) {
+      body.append(el('tr', {}, [
+        el('td', { text: a.agent }), el('td', { text: String(a.runs) }), el('td', { text: String(a.succeeded) }), el('td', { text: String(a.failed) }),
+        el('td', { text: show(a.inputTokens) + (a.tokenUnknownRuns ? ` (${a.tokenUnknownRuns} runs unreported)` : '') }),
+        el('td', { text: show(a.outputTokens) }),
+        el('td', { text: a.reportedCostUsd === null ? 'unknown' : '$' + a.reportedCostUsd.toFixed(4) + (a.costUnknownRuns ? ` (${a.costUnknownRuns} runs unreported)` : '') }),
+        el('td', { text: (a.totalDurationMs / 1000).toFixed(1) + 's' }),
+      ]));
+    }
+  }
+
+  // ----- advanced -----
+  function renderTools() {
+    const list = $('tools-list');
+    list.replaceChildren();
+    const tools = cfg ? cfg.optimization.tools : [];
+    if (tools.length === 0) list.append(el('p', { class: 'muted', text: 'No tools registered yet.' }));
+    for (const t of tools) {
+      const sel = el('select', {}, ['ACTIVE', 'DORMANT', 'QUARANTINED', 'DISABLED'].map((s) => el('option', { value: s, text: s, ...(s === t.state ? { selected: '' } : {}) })));
+      sel.addEventListener('change', async () => {
+        try {
+          await api('/api/tools/state', { method: 'POST', body: { name: t.name, state: sel.value } });
+          await loadStatus();
+          renderTools();
+        } catch (err) { alert(err.message); }
+      });
+      list.append(el('div', { class: 'check-item row' }, [el('div', {}, [el('b', { text: t.name }), el('div', { class: 'muted', text: t.description })]), sel]));
+    }
+  }
+
+  $('btn-add-tool').addEventListener('click', async () => {
+    const name = $('new-tool-name').value.trim();
+    const description = $('new-tool-desc').value.trim();
+    if (!/^[A-Za-z0-9_.-]{1,64}$/.test(name)) { alert('Tool name: letters, digits, dot, underscore or hyphen (max 64).'); return; }
+    const next = structuredClone(cfg);
+    next.optimization.tools.push({ name, description, state: 'ACTIVE' });
+    try {
+      await api('/api/config', { method: 'PUT', body: { config: next } });
+      $('new-tool-name').value = ''; $('new-tool-desc').value = '';
+      await loadStatus();
+      renderTools();
+    } catch (err) { alert(err.message); }
+  });
+
+  async function loadRawConfig() {
+    const res = await api('/api/config');
+    $('raw-config').value = JSON.stringify(res.config, null, 2);
+    $('raw-msg').replaceChildren();
+  }
+  $('btn-raw-reload').addEventListener('click', loadRawConfig);
+  $('btn-raw-save').addEventListener('click', async () => {
+    let parsed;
+    try { parsed = JSON.parse($('raw-config').value); } catch (err) { showMsg('raw-msg', 'Not valid JSON: ' + err.message, false); return; }
+    try {
+      await api('/api/config', { method: 'PUT', body: { config: parsed } });
+      showMsg('raw-msg', 'Saved.', true);
+      await loadStatus();
+    } catch (err) { showMsg('raw-msg', err.message, false); }
+  });
+
+  // ----- start -----
+  loadStatus().then(() => showTab(cfg.setupCompleted ? 'task' : 'setup')).catch((err) => {
+    document.querySelector('main').prepend(el('div', { class: 'notice err', text: 'Could not load ORNELYON: ' + err.message }));
+  });
+})();
+</script>
+</body>
+</html>
