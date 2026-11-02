@@ -79,6 +79,8 @@ node dist/interface/cli.js cost
 node dist/interface/cli.js tool WebFetch DORMANT
 ```
 
+**MCP診断の安全性：** 通常の`doctor`は`claude mcp get`を実行しません。登録されたMCPサーバーを起動する可能性があるためです。登録済みのORNELYON名義のコマンドを確認し、信頼できる場合に限って`node dist/interface/cli.js doctor --probe-registration`を指定してください。名前だけでは安全性を保証できません。修復は自動実行されません。
+
 ## インストールプリセット
 
 | プリセット | 有効になる機能 |
