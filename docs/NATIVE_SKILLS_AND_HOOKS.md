@@ -87,7 +87,10 @@ What this means here, kept apart: (1) *Confirmed*: nothing about our files is kn
 | Installer: dry run default, per-file hashes, edited/added/missing file, links, legacy marker, leftover folders (automated tests, temporary folders) | PASS |
 | Codex 0.162.1 engine (`codex app-server`, `skills/list`, scratch CODEX_HOME, scratch project, no model call; `scripts/codex-skills-probe.mjs`): the three skills are found in repo scope, enabled, with `displayName` equal to the name, so the YAML parses | PASS |
 | Codex engine: the `policy` value is not part of the `skills/list` answer, so whether implicit use is really off cannot be seen | NOT_TESTED |
-| Duplicate skills: the probe's scratch project is not a Git repository, so only the working folder was scanned and no duplicate was produced | NOT_TESTED |
+| Duplicate skills (same name in the repository root and in the working sub-folder, scratch Git repository, engine only): Codex 0.162.1 lists **both** copies (6 entries for 3 skills), as the page says ("both can appear in skill selectors"); which one a `$name` call would use is not shown | PASS (observed listing); selection NOT_TESTED |
+| A malformed `agents/openai.yaml` (engine only): the skill is still listed, but its metadata (`displayName`) is dropped without an error entry. A damaged policy file therefore fails silently, which is one more reason the installer keeps these files hash-protected | PASS (observed) |
+| Codex engine starts the project MCP server from a config.toml and sees 6 read-only tools (scratch CODEX_HOME, one synthetic task, no `--all-tasks`, no `--expose-content`) | PASS |
+| Claude Code CLI 2.1.316 `claude mcp get` on a project `.mcp.json` entry: shows the command and `Pending approval` until approved in an interactive session; personal settings files unchanged (hash-compared) | PASS |
 | Codex TUI / Codex app showing the skills, `$` picker, `/skills`, explicit call, no implicit call | NOT_TESTED (needs the GUI and/or a model turn) |
 | Claude Code: loading the skills, and how it treats the extra `agents/openai.yaml` file (the skills page was not found to say anything about unknown files) | NOT_TESTED |
 | Hook helper with synthetic events (format, silence on bad input, `stop_hook_active`, no writes, repeat firing, failure paths) | PASS (tests); real Stop firing NOT_TESTED |

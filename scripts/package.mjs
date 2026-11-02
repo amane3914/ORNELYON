@@ -63,6 +63,7 @@ for (const file of [
   'docs/DYNAMIC_SCOPE_DESIGN.md',
   'docs/WORKSPACE_IDENTITY.md',
   'docs/NATIVE_SKILLS_AND_HOOKS.md',
+  'docs/NATIVE_SKILLS_MANUAL_VERIFICATION.md',
 ]) {
   if (!existsSync(join(root, file))) {
     throw new Error(`Missing packaged file: ${file}`);
