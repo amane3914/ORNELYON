@@ -78,7 +78,7 @@ export function planInstall(target: string, skills = bundledSkills()): SkillPlan
   return skills.map((s) => {
     const dest = join(target, s.name);
     if (!existsSync(dest)) {
-      return { name: s.name, action: 'INSTALL', detail: `would create ${dest}` };
+      return { name: s.name, action: 'INSTALL', detail: `create ${dest}` };
     }
     const own = ownedAndUnchanged(dest);
     if (own === null) {
@@ -88,7 +88,7 @@ export function planInstall(target: string, skills = bundledSkills()): SkillPlan
       return { name: s.name, action: 'KEEP_MODIFIED', detail: 'installed earlier but edited since; left untouched' };
     }
     const marker = readMarker(dest);
-    return marker?.sha256 === s.sha256 ? { name: s.name, action: 'UP_TO_DATE', detail: 'already installed' } : { name: s.name, action: 'UPDATE', detail: 'installed earlier, unchanged since; would be replaced by the bundled version' };
+    return marker?.sha256 === s.sha256 ? { name: s.name, action: 'UP_TO_DATE', detail: 'already installed' } : { name: s.name, action: 'UPDATE', detail: 'installed earlier, unchanged since; replace with the bundled version' };
   });
 }
 
@@ -102,7 +102,7 @@ export function planRemove(target: string, skills = bundledSkills()): SkillPlanI
     if (own === null) {
       return { name: s.name, action: 'SKIP_FOREIGN', detail: 'not installed by ORNELYON; left untouched' };
     }
-    return own ? { name: s.name, action: 'REMOVE', detail: `would delete ${dest}` } : { name: s.name, action: 'KEEP_MODIFIED', detail: 'edited since install; left untouched (remove it yourself if you want it gone)' };
+    return own ? { name: s.name, action: 'REMOVE', detail: `delete ${dest}` } : { name: s.name, action: 'KEEP_MODIFIED', detail: 'edited since install; left untouched (remove it yourself if you want it gone)' };
   });
 }
 

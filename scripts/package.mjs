@@ -39,6 +39,8 @@ rmSync(build, { recursive: true, force: true });
 // Compiled tests are for developers; end users do not need them.
 rmSync(join(stage, 'dist', 'test'), { recursive: true, force: true });
 cpSync(join(root, 'web'), join(stage, 'web'), { recursive: true });
+// Agent Skills (plain SKILL.md folders) that `ornelyon skills install` copies on request.
+cpSync(join(root, 'integrations'), join(stage, 'integrations'), { recursive: true });
 for (const file of [
   'package.json',
   'package-lock.json',
@@ -60,6 +62,7 @@ for (const file of [
   'docs/DEVELOPMENT_PLAN.md',
   'docs/DYNAMIC_SCOPE_DESIGN.md',
   'docs/WORKSPACE_IDENTITY.md',
+  'docs/NATIVE_SKILLS_AND_HOOKS.md',
 ]) {
   if (!existsSync(join(root, file))) {
     throw new Error(`Missing packaged file: ${file}`);
