@@ -71,8 +71,8 @@ Ordered roughly by value. Each item that adds capability needs its own security 
 
 1. Live GUI verification checklist run by a person on the Codex app and the Claude desktop app, recorded as evidence (turns NOT_TESTED into PASS or FAIL).
 2. Support for the MCP 2026-07-28 revision (`server/discover`, result types, caching hints), once the exact shapes are checked against the specification.
-3. Scope that follows live history (a task-id allow-list file, or a time window) instead of a start-time snapshot, without widening access by default.
-4. A `--print-config --client codex|claude|json` filter and a `doctor` that also compares a registered entry's paths with the current build (read the client's *own* `mcp get` output, never its credential files).
+3. Scope that follows live history instead of a start-time snapshot, without widening access by default. Re-evaluated in v0.6.0 Phase 1 and held: see DYNAMIC_SCOPE_DESIGN.md.
+4. (`doctor` done in v0.6.0 Phase 1: `ornelyon doctor [--name <entry>]`; the `--client` filter is not done.) A `--print-config --client codex|claude|json` filter and a `doctor` that also compares a registered entry's paths with the current build (read the client's *own* `mcp get` output, never its credential files).
 5. Streamable HTTP transport on loopback with a bearer token, for clients that do not spawn stdio servers. Needs token handling design, Origin checks and no credential relay.
 6. Controlled write tools (record accept/reject) and agent execution tools: only with explicit per-call human approval in the client, an audit record, spend limits, and the existing Evidence Gate unchanged. Not started; no design exists yet.
 7. Packaging as a Codex plugin or Claude Code plugin/skill so registration is one step, plus guidance telling the model how to treat returned text as data.
@@ -84,3 +84,9 @@ Ordered roughly by value. Each item that adds capability needs its own security 
 - Prompt injection through returned content and through tool results fed back into write tools.
 - Spend: a tool that starts an agent can start paid calls from a model's decision. It needs a hard cap outside the model's control.
 - Whether automated use under a subscription sign-in is allowed is still NOT CONFIRMED (see README).
+
+## Checking the setup and finding unfinished tasks (v0.6.0 Phase 1)
+
+`ornelyon doctor` now ends with an "ORNELYON MCP / GUI integration" section (`--name <entry>` if you registered under another name). It reads what Codex and Claude Code themselves report (`codex mcp list --json`, `claude mcp get`), never their credential files. It checks that the registered node and entry file exist, whether they are this copy of ORNELYON, how wide the scope is, runs the self-test, and checks history, passports and the workspace label. Every fix is a printed command; nothing is changed. A GUI window is always NOT_TESTED. Exit code 1 means at least one FAIL.
+
+To see tasks that never wrote a final record, call `ornelyon_recent_tasks` with `incomplete: true`. They are shown as `NO_FINAL_RECORD`, not as interrupted, because a run that is still going looks the same. Only tasks already in the server's scope appear; to add one, restart with `--allow-task <id>`.

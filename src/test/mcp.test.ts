@@ -810,3 +810,35 @@ test('incomplete tasks: the scan stays cheap on a large history', async () => {
   assert.equal(r.matched, 300);
   assert.equal(r.tasks.length, 20);
 });
+
+// ---------- v0.6.0 Phase 1: output is short, stable and does not leak local paths ----------
+
+test('output: every tool answers briefly, identically twice in a row, and with no local path or workspace label', async () => {
+  const env = await setup();
+  const ids: string[] = [];
+  for (let i = 0; i < 25; i += 1) {
+    ids.push(await makeTask(env, { checks: [PASS_CHECK], changedFile: 'sample.txt' }));
+  }
+  const s = await ready({ tasks: ids });
+  const id = ids[0];
+  const calls: [string, Record<string, unknown>][] = [
+    ['ornelyon_status', {}],
+    ['ornelyon_recent_tasks', { limit: 20 }],
+    ['ornelyon_recent_tasks', { limit: 20, incomplete: true }],
+    ['ornelyon_dispatch_preview', {}],
+    ['ornelyon_evidence', { taskId: id }],
+    ['ornelyon_passport', { taskId: id }],
+    ['ornelyon_handoff_preview', { taskId: id, to: 'claude' }],
+  ];
+  for (const [name, args] of calls) {
+    const first = await tool(s, name, args);
+    const second = await tool(s, name, args);
+    assert.equal(first.isError, false, name);
+    assert.equal(first.text, second.text, `${name} gives the same text twice (stable key and row order)`);
+    assert.ok(first.text.length < 9000, `${name} is ${first.text.length} characters`);
+    assert.ok(!first.text.includes(env.home) && !first.text.includes(env.root), `${name} shows no local path`);
+    assert.ok(!/ws1:[0-9a-f]{16}/.test(first.text), `${name} shows no workspace label`);
+  }
+  // 20 rows of the biggest listing stay small.
+  assert.ok((await tool(s, 'ornelyon_recent_tasks', { limit: 20 })).text.length < 7000);
+});

@@ -43,3 +43,7 @@ An action tool is a tool that writes, starts an agent or records a decision. Non
 - Registrations hold absolute paths and break when the folder moves.
 - Whether automated use under a subscription sign-in is allowed is NOT CONFIRMED.
 - Version, tag and release decisions belong to the owner.
+
+## Status after v0.6.0 Phase 1
+
+Done on the branch: doctor (GUI integration diagnosis), NO_FINAL_RECORD listing and resume-preview wording, workspace label, output size/stability test. Held: dynamic MCP scope (DYNAMIC_SCOPE_DESIGN.md). Not done: any GUI-window verification (needs a person), MCP 2026-07-28 support, write or agent tools.
