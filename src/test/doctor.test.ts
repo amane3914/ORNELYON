@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash, randomUUID } from 'node:crypto';
-import { appendFileSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { appendFileSync, mkdtempSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { defaultConfig, saveConfig } from '../core/config.js';
@@ -24,8 +24,7 @@ function home(): string {
   delete process.env.CHIMERA_HOME;
   const config = defaultConfig();
   config.setupCompleted = true;
-  config.workspaceRoot = join(h, 'workspace');
-  mkdirSync(config.workspaceRoot, { recursive: true });
+  config.workspaceRoot = mkdtempSync(join(tmpdir(), 'ornelyon-doctor-ws-'));
   saveConfig(config);
   return h;
 }
@@ -108,7 +107,7 @@ test('doctor: clients that are missing or fail give NOT_TESTED / UNKNOWN, never 
 test('doctor: the whole diagnosis runs offline, changes nothing, and reports history and passport damage', async () => {
   const h = home();
   const config = defaultConfig();
-  config.workspaceRoot = join(h, 'workspace');
+  config.workspaceRoot = mkdtempSync(join(tmpdir(), 'ornelyon-doctor-ws-'));
   // One synthetic task with a passport.
   const id = randomUUID();
   const now = new Date().toISOString();
