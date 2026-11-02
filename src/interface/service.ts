@@ -700,7 +700,7 @@ export interface ContinuationAssessment {
   openIssueCount: number;
   nextStepRecorded: boolean;
   /** Files the passport names whose content differs from the workspace now (paths only). */
-  drift: { path: string; state: 'CHANGED' | 'MISSING_NOW' }[];
+  drift: { path: string; state: 'CHANGED' | 'MISSING_OR_UNREADABLE' }[];
 }
 
 /**
@@ -708,9 +708,12 @@ export interface ContinuationAssessment {
  * verified passport, the history and the current workspace files. It restores no session and starts nothing.
  * CLEAR means the saved data is complete and consistent. It is not an approval and not an instruction.
  */
-export function continuationAssessment(config: ChimeraConfig, passport: TaskPassport, records: RunRecord[]): ContinuationAssessment {
+export function continuationAssessment(config: ChimeraConfig, passport: TaskPassport, records: RunRecord[], historyComplete = true): ContinuationAssessment {
   const reasons: string[] = [];
   let blocked = false;
+  if (!historyComplete) {
+    reasons.push('Some history lines could not be read, so a newer state (for example a rejection) may be missing.');
+  }
   const latest = latestEvidence(records, passport.groupId);
   const historyState = latest ? { execution: latest.execution, verification: latest.verification, acceptance: latest.acceptance } : null;
   const saved = passport.status;
@@ -748,7 +751,7 @@ export function continuationAssessment(config: ChimeraConfig, passport: TaskPass
   if (passport.agentReport === undefined) {
     reasons.push('The agent report was not recorded (passport saved before v0.3.1).');
   }
-  const drift = passportDrift(passport, config.workspaceRoot).map((d) => ({ path: d.path, state: (d.actual === null ? 'MISSING_NOW' : 'CHANGED') as 'CHANGED' | 'MISSING_NOW' }));
+  const drift = passportDrift(passport, config.workspaceRoot).map((d) => ({ path: d.path, state: (d.actual === null ? 'MISSING_OR_UNREADABLE' : 'CHANGED') as 'CHANGED' | 'MISSING_OR_UNREADABLE' }));
   if (drift.length > 0) {
     reasons.push(`${drift.length} file(s) named by the passport differ from the workspace now.`);
   }

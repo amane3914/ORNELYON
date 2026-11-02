@@ -2,7 +2,7 @@
 
 OpenAI Codex、Claude Code、OpenAI互換のローカルLLMを、ひとつのセットアップ画面とひとつのコマンドから使うための小さなローカルハーネスです。OpenAI、Google、Microsoft、Anthropic とは無関係で、各社の公式製品でも、各社が承認・後援するものでもありません。Codex や Claude Code のサインインを使う前に、[アカウント・課金・各社の利用規約](#アカウント課金各社の利用規約)をお読みください。
 
-> 状態：**Public Preview**（v0.4.2）。安定版ではなく、下記に書いた以外の保証はありません。オフラインテスト 293 件が通過（偽 Agent・ローカルの偽モデル・手組みの履歴・公式 MCP SDK クライアント、有料呼び出しなし）。実 Claude Code の実行は、読み取り専用のタスクと Claude Code から Claude Code への読み取り専用の引き継ぎ（v0.3.0、v0.3.1、および v0.4.2 のビルドで各 1 回）で、v0.4.0 と v0.4.1 では実 Agent を呼んでいません。v0.4.2 では実 Claude Code を 2 回（読み取り専用タスク 1 回と Claude Code から Claude Code への引き継ぎ 1 回、2026-11-02）呼び、実 Codex は呼んでいません。方針として、従量課金・利用枠外の Agent 呼び出しでは v0.4.1 と v0.4.2 をテストしません。実ファイル編集、実際の失敗、Codex の実タスク（Codex を含む引き継ぎも）、他の OS、Claude Code / Codex から MCP サーバーへの実接続は **未実施（NOT_TESTED）** です。Efficiency Benchmark は手組み・合成・偽 Agent の履歴でしか確認しておらず、実際のトークン・費用の節約はまだ示せません。詳細は [IMPLEMENTATION_REPORT.md](IMPLEMENTATION_REPORT.md) の 13〜17 節を参照してください。
+> 状態：**Public Preview**（v0.4.2）。安定版ではなく、下記に書いた以外の保証はありません。オフラインテスト 294 件が通過（偽 Agent・ローカルの偽モデル・手組みの履歴・公式 MCP SDK クライアント、有料呼び出しなし）。実 Claude Code の実行は、読み取り専用のタスクと Claude Code から Claude Code への読み取り専用の引き継ぎ（v0.3.0、v0.3.1、および v0.4.2 のビルドで各 1 回）で、v0.4.0 と v0.4.1 では実 Agent を呼んでいません。v0.4.2 では実 Claude Code を 2 回（読み取り専用タスク 1 回と Claude Code から Claude Code への引き継ぎ 1 回、2026-11-02）呼び、実 Codex は呼んでいません。方針として、従量課金・利用枠外の Agent 呼び出しでは v0.4.1 と v0.4.2 をテストしません。実ファイル編集、実際の失敗、Codex の実タスク（Codex を含む引き継ぎも）、他の OS、Claude Code / Codex から MCP サーバーへの実接続は **未実施（NOT_TESTED）** です。Efficiency Benchmark は手組み・合成・偽 Agent の履歴でしか確認しておらず、実際のトークン・費用の節約はまだ示せません。詳細は [IMPLEMENTATION_REPORT.md](IMPLEMENTATION_REPORT.md) の 13〜17 節を参照してください。
 
 ## ORNELYON でできること
 
@@ -28,7 +28,7 @@ OpenAI Codex、Claude Code、OpenAI互換のローカルLLMを、ひとつのセ
 
 | 項目 | 状態 |
 | --- | --- |
-| Windows 11 と Node.js 24：`npm test`（オフラインテスト 293 件）、ビルド、パッケージ化、起動 | 作者がローカルで確認 |
+| Windows 11 と Node.js 24：`npm test`（オフラインテスト 294 件）、ビルド、パッケージ化、起動 | 作者がローカルで確認 |
 | Node.js 20、macOS、Linux | **実機では未確認。** CI の定義（`.github/workflows/ci.yml`）はありますが、まだ実行していません |
 | 実 Claude Code の実行 | 読み取り専用のタスクと、Claude Code から Claude Code への読み取り専用の引き継ぎ：v0.3.0 と v0.3.1、および v0.4.2 のビルドで各 1 回（2026-11-02、Claude Code 2.1.311、サブスクリプションのサインイン、計 2 回、どちらも成功）。**v0.4.0 と v0.4.1 では実 Agent を実行していません** |
 | 実 Codex タスク | NOT_TESTED（v0.4.2 でも実行していません。以前の確認では、作者の Windows 環境で Codex のサンドボックス設定により BLOCKED でした） |

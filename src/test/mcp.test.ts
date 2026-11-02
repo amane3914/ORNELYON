@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash, randomUUID } from 'node:crypto';
-import { mkdirSync, mkdtempSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { appendFileSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { PassThrough } from 'node:stream';
@@ -568,12 +568,13 @@ test('evidence: states are explicit, an agent claim never becomes proof, and a m
 
   const f = await ev(failed);
   assert.deepEqual([f.execution, f.verification, f.verifiedByOrnelyon], ['FAILED', 'FAIL', false]);
-  assert.ok(f.gaps.some((g) => /Failed check\(s\): a\.txt/.test(g)) && f.gaps.some((g) => /Execution is FAILED/.test(g)));
+  assert.ok(f.gaps.some((g) => /1 check\(s\) failed/.test(g)) && f.gaps.some((g) => /Execution is FAILED/.test(g)));
+  assert.ok(!JSON.stringify(f).includes('a.txt'), 'check names are withheld without content mode');
   assert.equal(f.failureKind, 'unknown');
 
   const u = await ev(unconfirmed);
   assert.deepEqual([u.verification, u.verifiedByOrnelyon], ['UNVERIFIED', false]);
-  assert.ok(u.gaps.some((g) => /could not be confirmed: b\.txt/.test(g)));
+  assert.ok(u.gaps.some((g) => /1 check\(s\) could not be confirmed/.test(g)));
 
   const b = await ev(bare);
   assert.equal(b.evidenceRecorded, false);
@@ -595,7 +596,7 @@ test('history search: filters work, newest first, and the scope decides before a
   const inB = await makeTask(env, { agent: 'codex', status: 'failed' });
   const outC = await makeTask(env, { agent: 'claude', checks: [{ ...PASS_CHECK, result: 'FAIL' }] });
   const s = await ready({ tasks: [inA, inB] });
-  type R = { matched: number; scope: string; filters: Record<string, string>; tasks: { groupId: string; agent: string; passportSaved: boolean }[] };
+  type R = { matched: number; scope: string; filters: Record<string, string>; tasks: { groupId: string; agent: string; passportFilePresent: boolean }[] };
   const q = async (args: Record<string, unknown>) => (await tool(s, 'ornelyon_recent_tasks', args)).json as R;
 
   assert.deepEqual((await q({})).tasks.map((t) => t.groupId), [inB, inA], 'newest first, out-of-scope task absent');
@@ -606,7 +607,7 @@ test('history search: filters work, newest first, and the scope decides before a
   assert.equal((await q({ decision: 'NOT_REQUIRED' })).tasks[0].groupId, inB);
   assert.equal((await q({ taskId: inA })).tasks[0].groupId, inA);
   assert.equal((await q({ limit: 1 })).matched, 2, 'matched counts in-scope matches before the limit');
-  assert.equal((await q({})).tasks[0].passportSaved, true);
+  assert.equal((await q({})).tasks[0].passportFilePresent, true);
   assert.deepEqual((await q({ agent: 'claude', taskId: inA })).filters, { taskId: inA, agent: 'claude' });
 
   // Nothing about a task outside the scope can be told from the answers: not by id, not by filter, not by count.
@@ -637,7 +638,7 @@ test('scope stays static: a task recorded after the server started is not visibl
 
 test('passport continuation: reasons say why, a stale passport is reported, and nothing reaches CLEAR by default', async () => {
   const env = await setup();
-  type P = { notice: string; continuation: { state: string; reasons: string[]; passportCurrent: boolean; historyState: { acceptance: string } | null; drift: { path: string; state: string }[] } };
+  type P = { notice: string; continuation: { state: string; reasons: string[]; passportCurrent: boolean; historyState: { acceptance: string } | null; drift: any } };
   const pp = async (s: Awaited<ReturnType<typeof ready>>, id: string) => (await tool(s, 'ornelyon_passport', { taskId: id })).json as P;
 
   const pending = await makeTask(env, { checks: [PASS_CHECK] });
@@ -645,7 +646,7 @@ test('passport continuation: reasons say why, a stale passport is reported, and 
   writeFileSync(join(env.root, 'tracked.txt'), 'one\n');
   const drifting = await makeTask(env, { checks: [PASS_CHECK], changedFile: 'tracked.txt' });
   writeFileSync(join(env.root, 'tracked.txt'), 'two\n');
-  const s = await ready({ tasks: [pending, blocked, drifting] });
+  const s = await ready({ tasks: [pending, blocked, drifting], exposeContent: true });
 
   const a = await pp(s, pending);
   assert.equal(a.continuation.state, 'CAUTION');
@@ -659,6 +660,11 @@ test('passport continuation: reasons say why, a stale passport is reported, and 
   const d = await pp(s, drifting);
   assert.equal(d.continuation.drift.length, 1);
   assert.equal(d.continuation.drift[0].state, 'CHANGED');
+  // Without content mode only the number of differing files is shown, not their names.
+  // Without content mode the continuation block shows only how many files differ. (changedFiles is an older field and is unchanged.)
+  const quiet = (await tool(await ready({ tasks: [drifting] }), 'ornelyon_passport', { taskId: drifting })).json as P;
+  assert.deepEqual(quiet.continuation.drift, { count: 1, paths: quiet.continuation.drift.paths });
+  assert.match(String((quiet.continuation.drift as { paths: string }).paths), /withheld/);
   assert.match(d.continuation.drift[0].path, /tracked\.txt$/);
   assert.equal(d.continuation.state, 'CAUTION');
 
@@ -688,4 +694,39 @@ test('passport: an edited passport is refused, never partly used', async () => {
   assert.equal(r.isError, true);
   assert.match(r.text, /integrity check failed/);
   assert.ok(!/continuation/.test(r.text));
+});
+
+test('evidence: a rejected task, an unreadable history and a hidden check name are never presented as verified or shown', async () => {
+  const env = await setup();
+  const rejected = await makeTask(env, { checks: [{ ...PASS_CHECK, name: 'secret-file-name.txt', detail: 'AGENT-CHOSEN-DETAIL' }] });
+  const summary = [...readRecords().records].reverse().find((r) => r.groupId === rejected && r.role === 'summary');
+  assert.ok(summary?.evidence);
+  const decided = decideAcceptance(summary.evidence, 'reject', { reason: 'synthetic' });
+  assert.ok(decided.ok);
+  appendRecord({ ...summary, role: 'decision', evidence: decided.evidence, recordedAt: new Date().toISOString() });
+  const s = await ready({ tasks: [rejected] });
+  const ev = (await tool(s, 'ornelyon_evidence', { taskId: rejected })).json as { verifiedByOrnelyon: boolean; verification: string; gaps: string[]; checks: { name: string; detail: string }[] };
+  assert.equal(ev.verification, 'PASS');
+  assert.equal(ev.verifiedByOrnelyon, false, 'PASS plus a rejection is not verified');
+  assert.ok(ev.gaps.includes('The user rejected this task.'));
+  assert.deepEqual([ev.checks[0].name, ev.checks[0].detail], ['(withheld)', '(withheld)']);
+  const open = (await tool(await ready({ tasks: [rejected], exposeContent: true }), 'ornelyon_evidence', { taskId: rejected })).json as { checks: { name: string; detail: string }[] };
+  assert.equal(open.checks[0].name, 'secret-file-name.txt');
+
+  // An unreadable line might hold a later rejection or failure: nothing may then count as verified.
+  const good = await makeTask(env, { checks: [PASS_CHECK] });
+  appendFileSync(historyPath(), 'this line is not json\n');
+  const s2 = await ready({ tasks: [good] });
+  const damaged = (await tool(s2, 'ornelyon_evidence', { taskId: good })).json as { verifiedByOrnelyon: boolean; gaps: string[]; historyComplete: boolean };
+  assert.equal(damaged.verifiedByOrnelyon, false);
+  assert.equal(damaged.historyComplete, false);
+  assert.ok(damaged.gaps.some((g) => /could not be read/.test(g)));
+  const cont = (await tool(s2, 'ornelyon_passport', { taskId: good })).json as { continuation: { state: string; reasons: string[] } };
+  assert.notEqual(cont.continuation.state, 'CLEAR');
+  assert.ok(cont.continuation.reasons.some((r) => /could not be read/.test(r)));
+
+  // The same message for a task that is not in scope and one that does not exist, also for evidence.
+  const unknown = await tool(s2, 'ornelyon_evidence', { taskId: randomUUID() });
+  const outside = await tool(s2, 'ornelyon_evidence', { taskId: env.groupId });
+  assert.equal(unknown.text, outside.text);
 });

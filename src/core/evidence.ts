@@ -169,10 +169,18 @@ export function latestEvidence<T extends { groupId: string; evidence?: Evidence 
 }
 
 /**
+ * True only when ORNELYON's own recorded checks all passed on a successful run, nobody rejected it and no override
+ * was used. A task with no check at all is never verified. This is not acceptance: it says nothing about a user decision.
+ */
+export function isVerified(e: Evidence): boolean {
+  return e.execution === 'SUCCESS' && e.verification === 'PASS' && e.checks.length > 0 && e.checks.every((c) => c.result === 'PASS') && e.acceptance !== 'REJECTED' && !e.overrideUsed;
+}
+
+/**
  * Why a task is not (fully) verified, in plain words. Empty only when ORNELYON's own checks passed.
  * It reads recorded states and checks only: an agent's statement is never an input here.
  */
-export function evidenceGaps(e: Evidence): string[] {
+export function evidenceGaps(e: Evidence, showNames = true): string[] {
   const gaps: string[] = [];
   if (e.execution !== 'SUCCESS') {
     gaps.push(`Execution is ${e.execution}.`);
@@ -180,10 +188,10 @@ export function evidenceGaps(e: Evidence): string[] {
   const failed = e.checks.filter((c) => c.result === 'FAIL').map((c) => c.name);
   const unconfirmed = e.checks.filter((c) => c.result === 'UNVERIFIED').map((c) => c.name);
   if (failed.length > 0) {
-    gaps.push(`Failed check(s): ${failed.join(', ')}.`);
+    gaps.push(showNames ? `Failed check(s): ${failed.join(', ')}.` : `${failed.length} check(s) failed.`);
   }
   if (unconfirmed.length > 0) {
-    gaps.push(`Check(s) that could not be confirmed: ${unconfirmed.join(', ')}.`);
+    gaps.push(showNames ? `Check(s) that could not be confirmed: ${unconfirmed.join(', ')}.` : `${unconfirmed.length} check(s) could not be confirmed.`);
   }
   if (e.verification === 'NOT_RUN') {
     gaps.push('No verification was run, so nothing is confirmed.');

@@ -684,8 +684,8 @@ export function savePassport(passport: TaskPassport): string {
   return file;
 }
 
-/** Whether a passport file exists for the task. It does not read or trust the file: `loadPassport` checks integrity. */
-export function passportSaved(groupId: string): boolean {
+/** Whether a passport file is present for the task. Presence only: it is not read, and `loadPassport` is what checks integrity. */
+export function passportFilePresent(groupId: string): boolean {
   return existsSync(passportPath(groupId));
 }
 

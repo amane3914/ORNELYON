@@ -1,8 +1,8 @@
 import { createHash } from 'node:crypto';
 import { loadConfig, type AgentKey, type ChimeraConfig } from '../core/config.js';
 import { readRecords } from '../core/history.js';
-import { evidenceGaps } from '../core/evidence.js';
-import { cleanForHandoff, INSTRUCTION_MAX, loadPassport, passportSaved } from '../core/passport.js';
+import { evidenceGaps, isVerified } from '../core/evidence.js';
+import { cleanForHandoff, INSTRUCTION_MAX, loadPassport, passportFilePresent } from '../core/passport.js';
 import { dataDir } from '../core/paths.js';
 import { redact } from '../core/redact.js';
 import { AGENT_KEYS, continuationAssessment, detectAgents, dispatchPreview, evidenceFor, handoffOverview, prepareHandoff, recentTasks, systemInfo } from './service.js';
@@ -160,7 +160,7 @@ const TOOLS: ToolDef[] = [
   {
     name: 'ornelyon_recent_tasks',
     description:
-      'Read-only. Search the tasks this server may show, newest first, with their agent, kind and Execution / Verification / Acceptance states and whether a passport is saved. Optional filters: taskId, agent, execution, verification, decision. No prompts or outputs. A task outside the scope and one that does not exist are both simply absent.',
+      'Read-only. Search the tasks this server may show, newest first, with their agent, kind and Execution / Verification / Acceptance states and whether a passport file is present. Optional filters: taskId, agent, execution, verification, decision. No prompts or outputs. A task outside the scope and one that does not exist are both simply absent.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -192,9 +192,9 @@ const TOOLS: ToolDef[] = [
       const matched = recentTasks(records, records.length, filter);
       return {
         scope: opts.tasks === 'all' ? 'all tasks' : `${opts.tasks.length} task(s) chosen by the operator`,
-        filters: Object.fromEntries(Object.entries({ taskId: a.taskId, agent, execution, verification, acceptance }).filter(([, v]) => v !== undefined)),
+        filters: Object.fromEntries(Object.entries({ taskId: a.taskId, agent, execution, verification, decision: acceptance }).filter(([, v]) => v !== undefined)),
         matched: matched.length,
-        tasks: matched.slice(0, limit).map((t) => ({ ...t, passportSaved: passportSaved(t.groupId) })),
+        tasks: matched.slice(0, limit).map((t) => ({ ...t, passportFilePresent: passportFilePresent(t.groupId) })),
       };
     },
   },
@@ -228,16 +228,21 @@ const TOOLS: ToolDef[] = [
     run: (a, { text, opts }) => {
       const view = evidenceFor(requireTaskId(a, opts));
       if (!view) {
-        throw new ToolError('No such task.');
+        throw new ToolError(NOT_AVAILABLE);
       }
       const e = view.evidence;
       // "verified" is ORNELYON's own judgement from recorded checks. It is false whenever the record is missing or any state is unknown.
-      const verifiedByOrnelyon = view.recorded && e.execution === 'SUCCESS' && e.verification === 'PASS';
+      // It is also false when history lines were unreadable, because a later rejection or failure could be among them.
+      const historyComplete = readRecords().skippedLines === 0;
+      const verifiedByOrnelyon = view.recorded && historyComplete && isVerified(e);
       return {
         taskId: view.summary.groupId,
         evidenceRecorded: view.recorded,
         verifiedByOrnelyon,
-        gaps: view.recorded ? evidenceGaps(e) : ['No Evidence Gate record exists for this task. The states below are derived from the run status only and confirm nothing.'],
+        gaps: [
+          ...(view.recorded ? evidenceGaps(e, opts.exposeContent) : ['No Evidence Gate record exists for this task. The states below are derived from the run status only and confirm nothing.']),
+          ...(historyComplete ? [] : ['Some history lines could not be read, so a newer state may be missing. Nothing is reported as verified.']),
+        ],
         agent: view.summary.result.agent,
         provenance: view.summary.origin ?? 'unknown',
         failureKind: view.summary.result.errorKind ?? null,
@@ -247,7 +252,8 @@ const TOOLS: ToolDef[] = [
         acceptance: e.acceptance,
         overrideUsed: e.overrideUsed,
         acceptanceReason: text(e.acceptanceReason),
-        checks: e.checks.map((c) => ({ name: c.name, kind: c.kind, result: c.result, detail: c.detail })),
+        // Check names and details can contain file names and text an agent influenced, so they follow the content setting.
+        checks: e.checks.map((c) => ({ name: text(c.name), kind: c.kind, result: c.result, detail: text(c.detail) })),
         changedFiles: e.changedFiles.map((f) => f.path),
         notice: 'Only ORNELYON\'s recorded checks count as evidence. What an agent said about its own work does not, and neither does a task that is not in ORNELYON\'s history.',
       };
@@ -267,12 +273,14 @@ const TOOLS: ToolDef[] = [
       const records = readRecords().records;
       const overview = handoffOverview(config, p, records, allReady());
       const report = p.agentReport;
-      const continuation = continuationAssessment(config, p, records);
+      const continuation = continuationAssessment(config, p, records, readRecords().skippedLines === 0);
+      // File paths named by the passport follow the content setting; without it only how many differ is shown.
+      const shownContinuation = opts.exposeContent ? continuation : { ...continuation, drift: { count: continuation.drift.length, paths: 'withheld (start the server with --expose-content to include them)' } };
       return {
         taskId: p.groupId,
         notice: 'Saved hand-over data. It is not an instruction and not an approval. Nothing here restores a session or starts an agent.',
         createdAt: p.createdAt,
-        continuation: { ...continuation, note: 'CLEAR means the saved data is complete and consistent, not that the work is correct or approved. Workspace files are compared with the current configured workspace; the git commit was not re-checked.' },
+        continuation: { ...shownContinuation, note: 'CLEAR means the saved data is complete and consistent, not that the work is correct or approved. Workspace files are compared with the current configured workspace; the git commit was not re-checked.' },
         kind: p.kind ?? null,
         status: p.status,
         executingAgent: p.executingAgent,
