@@ -24,20 +24,21 @@ Nothing is installed by default. The helper copies the skill folders into a fold
 ornelyon skills list
 ornelyon skills install --client claude            # dry run: shows what would be written
 ornelyon skills install --client claude --apply    # writes ~/.claude/skills/ornelyon-*
+ornelyon skills install --client codex --apply     # writes ~/.agents/skills/ornelyon-*
 ornelyon skills remove  --client claude --apply    # removes only unmodified copies it installed
 ```
 
-- `--client claude` means `~/.claude/skills`, the personal-skills folder the Claude Code documentation names. For Codex there is no `--client codex` on purpose: the OpenAI pages checked describe plugin packaging and do not state a user skills folder. Use `--target <folder>` with the folder your Codex version documents, or copy the three folders by hand.
+- `--client claude` means `~/.claude/skills` (Claude Code's personal-skills folder). `--client codex` means `$HOME/.agents/skills`, the user-level folder of the Codex skills page; for a project, use `--target <repo>/.agents/skills`. This reuses the same protection as the Claude install; there is no separate Codex installer.
 - A folder with the same name that ORNELYON did not install is `SKIP_FOREIGN`. A copy you edited, or that has any extra file, is `KEEP_MODIFIED`. Both are left alone, so files you keep next to a skill are never deleted. (A folder someone built with a copied marker and identical contents would count as ours; that needs write access to your skills folder.)
 - Each skill is written to a fresh temporary sibling folder and renamed; an update keeps the old copy until the new one is in place and restores it on failure. If a later skill fails, the earlier ones stay installed and the command says so. Re-running is harmless.
-- To disable without deleting: in Claude Code the skills already need an explicit `/ornelyon-evidence-check` style call. To remove: `skills remove`, or delete the folder.
+- To disable without deleting: in Claude Code the skills already need an explicit `/ornelyon-evidence-check` style call. In Codex, the official page documents `[[skills.config]]` entries (`path = "…/SKILL.md"`, `enabled = false`) in `~/.codex/config.toml`; ORNELYON does not edit that file. To remove: `skills remove`, or delete the folder.
 - No settings file (`settings.json`, `config.toml`, `.claude.json`) and no MCP registration is edited by ORNELYON. With `--apply` it only adds `ornelyon-*` folders under the folder you named (for `--client claude`, inside `~/.claude/skills`).
 
 ## Hooks: decision
 
 **Adopted (design, helper and tests): one opt-in Claude Code `Stop` hook. Not enabled by anything ORNELYON does. Codex hooks: held.**
 
-`ornelyon hooks print --task <id> [--task <id> …]` prints a settings entry. You add it to a settings file yourself; deleting it disables it. Not verified against a live Claude Code session. The entry uses a `command` plus an `args` array (the exec form that the hooks page summary mentions). If your Claude Code version does not accept `args`, a bare `node` would read the hook input as a script and fail on every Stop event (a non-blocking error); check the entry in your version first, or use a single quoted command string instead.
+`ornelyon hooks print --task <id> [--task <id> …]` prints a settings entry. You add it to a settings file yourself; deleting it disables it. Not verified against a live Claude Code session. The entry uses `command` plus an `args` array. The Claude Code hooks page documents this as the exec form: `command` is spawned directly with `args` as the argument vector, with no shell; on Windows `command` must be a real executable such as `node.exe` (the printed entry uses the Node that ran the command). Whether your installed Claude Code version behaves as documented is NOT_TESTED.
 
 What the helper (`ornelyon hook stop`) does, and does not:
 
@@ -53,18 +54,22 @@ What the helper (`ornelyon hook stop`) does, and does not:
 
 Limits you should know: the hook only knows the tasks you list by id (static, like the MCP scope). Work done in an official GUI is not recorded by ORNELYON, so a Stop event says nothing about it. Whether the user-visible `systemMessage` appears as described in your Claude Code version is **NOT_TESTED**.
 
+Codex hooks: the plugin page shows a `SessionStart` example for manually installed plugins; the hooks page it points to (`learn.chatgpt.com/docs/hooks`) was not read in either pass, so no Codex hook is offered.
+
 Held: `PostToolUse`/`PreToolUse` hooks (they act mid-task and could be steered by tool output), `SubagentStop`, and any Codex hook (the OpenAI pages show a `SessionStart` example for manually installed plugins and refer to a hooks page that was not read; plugin hooks need explicit user trust).
 
 ## What the official pages say (checked 2026-11-02)
 
-Claude Code (`code.claude.com/docs/en/skills`, `…/hooks`; both pages were long and partly read through summaries, so those parts are lower confidence):
+Claude Code (`code.claude.com/docs/en/skills`, `…/hooks`; the hooks details below were re-checked verbatim in a second pass; skills-page details not marked otherwise come from the first, partly summarised pass):
 - Skills live in `~/.claude/skills/<name>/SKILL.md` (personal), `.claude/skills/<name>/SKILL.md` (project), or `<plugin>/skills/…`. Frontmatter includes `name`, `description`, `disable-model-invocation`, `user-invocable`, `allowed-tools`. Enterprise overrides personal, personal overrides project; plugin skills are namespaced.
 - MCP tool names in `allowed-tools` are **not stated** on the skills page, so the skills pre-approve nothing.
-- Hooks are set in settings files (user, project, local, managed, plugin). `Stop` input has `stop_hook_active`. Exit 0 with a JSON object is parsed; exit 2 blocks. Defaults: 600 s timeout for command hooks, and a limit of eight consecutive stop-hook continuations (both taken from the page summary; not independently confirmed).
+- Hooks are set in settings files (user, project, local, managed, plugin). `Stop` input has `stop_hook_active`. Exit 0 with a JSON object is parsed; exit 2 blocks. Checked verbatim on the page (2026-11-02, second pass): `args` is a supported command-hook field (exec form); the `timeout` field is in seconds and defaults to 600 for command hooks (30 for `UserPromptSubmit`); `stop_hook_active` is true when Claude Code is already continuing because of a stop hook, and after eight consecutive continuations Claude Code overrides the next block and ends the turn (the count resets when Claude calls a tool; `CLAUDE_CODE_STOP_HOOK_BLOCK_CAP` raises it); `systemMessage` is a "warning message shown to the user" (some events discard it or deliver it elsewhere, each event's section says so; the `Stop` section was not checked for this). Output strings are capped at 10,000 characters.
 
 OpenAI (`developers.openai.com/plugins/...`):
-- A skill is a folder with `SKILL.md` (`name`, `description`); optional `scripts/`, `references/`, `assets/`. Plugins package skills under `skills/` and MCP servers in `.mcp.json`; install is via `codex plugin marketplace add …` or manual copy. Standalone skill folders, an explicit-invocation-only setting, name precedence and Codex client versions are **not stated** on those pages. `$skill-name` is how the page invokes the skill creator.
-- Because of that, the Codex side of this release is only "the same SKILL.md files can be copied to a folder you choose". Whether a given Codex version loads them, and whether it may use them without being asked (the `disable-model-invocation` line is a Claude Code field and may be ignored there), is **NOT_TESTED**. The descriptions say "Use only when the user asks" to keep implicit use narrow.
+- Plugin pages: a skill is a folder with `SKILL.md` (`name`, `description`); plugins package skills under `skills/` and MCP servers in `.mcp.json`.
+- Codex skills page (`developers.openai.com/codex/skills` redirects to `learn.chatgpt.com/docs/build-skills`; the cached copy shows no date or Codex version): Codex reads skills from repository, user, admin and system locations: `$CWD/.agents/skills`, `$CWD/../.agents/skills`, `$REPO_ROOT/.agents/skills`, user `$HOME/.agents/skills`, admin `/etc/codex/skills`. `SKILL.md` must include `name` and `description`. Skills with the same `name` are not merged; both can appear in selectors, and no precedence is stated. Symlinked skill folders are supported. Explicit use: `/skills` or typing `$`. Optional `agents/openai.yaml` has a `policy` section with `allow_implicit_invocation: false`, which stops implicit use while `$skill` still works. Disable without deleting: `[[skills.config]]` with `enabled = false` in `~/.codex/config.toml`.
+- **`disable-model-invocation: true` is a Claude Code field.** The Codex page documents only `name` and `description` for `SKILL.md`, so Codex is not documented to honour it and it does not guarantee manual-only use in Codex. The bundled skills do not ship `agents/openai.yaml`; until they do, a Codex that matches the description may offer them on its own. The wording "Use only when the user asks" narrows that but is not a guarantee. This stays NOT_TESTED.
+- So the Codex side is: the same `SKILL.md` files can be installed into `$HOME/.agents/skills` or a repo's `.agents/skills`. Whether a given Codex version loads them, and whether it uses them without being asked, is **NOT_TESTED**.
 
 ## Not verified
 

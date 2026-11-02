@@ -34,9 +34,9 @@ export function bundledSkills(dir = bundledSkillsDir()): BundledSkill[] {
     });
 }
 
-/** The folder a client documents for personal skills. Only Claude Code's is documented; Codex needs an explicit target. */
+/** The personal-skills folder each client documents: Claude Code `~/.claude/skills`, Codex `$HOME/.agents/skills`. */
 export function defaultTarget(client: string): string | null {
-  return client === 'claude' ? join(homedir(), '.claude', 'skills') : null;
+  return client === 'claude' ? join(homedir(), '.claude', 'skills') : client === 'codex' ? join(homedir(), '.agents', 'skills') : null;
 }
 
 export type SkillAction = 'INSTALL' | 'UP_TO_DATE' | 'UPDATE' | 'SKIP_FOREIGN' | 'REMOVE' | 'KEEP_MODIFIED' | 'NOT_INSTALLED';

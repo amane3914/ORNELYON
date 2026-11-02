@@ -58,7 +58,7 @@ Usage:
       --require-review                    Ask another enabled agent for an independent review
       --dry-run                           Show the dispatch plan and checks. Starts no agent.
       --timeout <seconds>                 Upper bound for this run
-  ornelyon skills list|install|remove [--client claude | --target <folder>] [--apply]
+  ornelyon skills list|install|remove [--client claude|codex | --target <folder>] [--apply]
                                           Bundled Agent Skills. Dry run unless --apply; never overwrites a skill you wrote.
   ornelyon hooks print --task <id> [--task <id> ...]
                                           Print (do not install) a Claude Code Stop-hook settings entry. Hooks are off until you add it.
@@ -560,7 +560,7 @@ function cmdSkills(args: string[]): number {
   const [sub] = args;
   const apply = args.includes('--apply');
   if (sub !== 'list' && sub !== 'install' && sub !== 'remove') {
-    console.error('Usage: ornelyon skills list|install|remove [--client claude | --target <folder>] [--apply]');
+    console.error('Usage: ornelyon skills list|install|remove [--client claude|codex | --target <folder>] [--apply]');
     return 2;
   }
   const skills = bundledSkills();
@@ -583,7 +583,7 @@ function cmdSkills(args: string[]): number {
   }
   const target = explicit !== undefined ? explicit : client !== undefined ? defaultTarget(client) : null;
   if (target === null) {
-    console.error('Name where to put the skills: --client claude (the folder Claude Code documents) or --target <folder>. For Codex give --target; its skills folder is not confirmed by the official pages this build was checked against.');
+    console.error('Name where to put the skills: --client claude (~/.claude/skills), --client codex (~/.agents/skills) or --target <folder>.');
     return 2;
   }
   let folder: string;
@@ -617,7 +617,7 @@ function cmdHooks(args: string[]): number {
     return 2;
   }
   console.log('Claude Code Stop-hook entry (printed only; nothing was changed). It shows the Evidence Gate state of the listed tasks to you, never blocks, never asks the model to continue, and starts no agent.');
-  console.log('Add it yourself to the "hooks" section of ~/.claude/settings.json (or a project settings file) to enable it; delete the entry to disable it. Not verified against a live Claude Code session.');
+  console.log('Add it yourself to the "hooks" section of ~/.claude/settings.json (or a project settings file) to enable it; delete the entry to disable it. Exec form (command plus args) is documented by Claude Code; it was not run in a live Claude Code session here.');
   console.log(stopHookSnippet(process.execPath, fileURLToPath(import.meta.url), ids));
   return 0;
 }

@@ -207,7 +207,7 @@ test('cli: skills install is a dry run by default, needs a named target, and hoo
   assert.equal(existsSync(target), false);
   const none = spawnSync(process.execPath, [CLI, 'skills', 'install'], { env, encoding: 'utf8' });
   assert.equal(none.status, 2, 'no guessing where to write');
-  assert.match(none.stderr, /not confirmed/);
+  assert.match(none.stderr, /--client codex/);
   const real = spawnSync(process.execPath, [CLI, 'skills', 'install', '--target', target, '--apply'], { env, encoding: 'utf8' });
   assert.equal(real.status, 0, real.stderr);
   assert.deepEqual(readdirSync(target).sort(), EXPECTED);
