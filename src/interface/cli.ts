@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { loadConfig, saveConfig, type AgentKey, type ToolState } from '../core/config.js';
 import { configPath, dataDir, packageRoot } from '../core/paths.js';
 import { MCP_TOOL_NAMES, registrationHelp, serveStdio } from './mcp.js';
+import { selfTest } from './mcp-selftest.js';
 import { cmdBenchmark } from './cli-benchmark.js';
 import { readRecords } from '../core/history.js';
 import { setToolState, TOOL_STATES } from '../optimization/dormancy.js';
@@ -84,7 +85,9 @@ Usage:
                                           --expose-content adds text (objectives, reports) for the chosen tasks; not with --all-tasks.
   ornelyon mcp --print-config [same options]
                                           Print how to register it with Claude Code, Codex or other clients. Changes nothing.
-  ornelyon tool <name> <state>            Set a tool to ACTIVE, DORMANT, QUARANTINED or DISABLED
+  ornelyon mcp --self-test [same options]
+                                          Start the server as a client would and speak MCP to it: PASS/FAIL. No GUI, no model call.
+  ornelyon tool <name> <state>          Set a tool to ACTIVE, DORMANT, QUARANTINED or DISABLED
   ornelyon config path                    Print the config file location
 
 \`chimera\` still works as an alias of \`ornelyon\`.
@@ -558,6 +561,12 @@ async function cmdMcp(args: string[]): Promise<number> {
   if (args.includes('--print-config')) {
     console.log(registrationHelp(fileURLToPath(import.meta.url), { exposeContent, tasks: allTasks ? 'all' : named, recent }));
     return 0;
+  }
+  if (args.includes('--self-test')) {
+    const result = await selfTest(fileURLToPath(import.meta.url), args.filter((a) => a !== '--self-test'));
+    console.log(result.lines.join('\n'));
+    console.log(result.ok ? 'SELF-TEST PASS (this server only; a GUI connection is NOT_TESTED by this command)' : 'SELF-TEST FAIL');
+    return result.ok ? 0 : 1;
   }
   const toolsArg = flag(args, '--tools');
   const tools = toolsArg === undefined ? undefined : toolsArg.split(',').map((t) => t.trim()).filter((t) => t !== '');

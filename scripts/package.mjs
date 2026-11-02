@@ -55,10 +55,12 @@ for (const file of [
   'UNINSTALL.md',
   'CONTRIBUTING.md',
   'SECURITY.md',
+  'docs/NATIVE_GUI_INTEGRATION.md',
 ]) {
   if (!existsSync(join(root, file))) {
     throw new Error(`Missing packaged file: ${file}`);
   }
+  mkdirSync(dirname(join(stage, file)), { recursive: true });
   if (file.endsWith('.bat')) {
     // cmd.exe is most reliable with CRLF line endings.
     writeFileSync(join(stage, file), readFileSync(join(root, file), 'utf8').replace(/\r?\n/g, '\r\n'));

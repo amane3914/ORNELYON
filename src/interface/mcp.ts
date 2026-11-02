@@ -510,7 +510,26 @@ export function registrationHelp(cliPath: string, scope: { exposeContent: boolea
     'Codex CLI (remove with `codex mcp remove ornelyon`):',
     `  codex mcp add ornelyon${envFlag} -- ${cmd}`,
     '',
-    'Other clients (mcp.json style):',
+    'Codex app, IDE extension and CLI read the same ~/.codex/config.toml, so this one block serves all three (or run the command above):',
+    tomlBlock(args, home),
+    '',
+    'Other clients (mcp.json style; Claude Code reads this form from .mcp.json at project scope):',
     json,
+    '',
+    'Claude desktop app, Code tab: it reads user-scope servers from ~/.claude.json, so the `claude mcp add --scope user` command above is enough.',
+    `Verify without any GUI or model call:  ${q(process.execPath)} ${q(cliPath)} mcp --self-test`,
+    'A live connection from a GUI is not tested by this tool. See docs/NATIVE_GUI_INTEGRATION.md.',
+  ].join('\n');
+}
+
+/** A TOML literal string has no escapes, so a Windows path is written exactly as it is. */
+const toml = (s: string): string => (s.includes("'") ? JSON.stringify(s) : `'${s}'`);
+
+function tomlBlock(args: string[], home: string | undefined): string {
+  return [
+    '[mcp_servers.ornelyon]',
+    `command = ${toml(process.execPath)}`,
+    `args = [${args.map(toml).join(', ')}]`,
+    ...(home ? ['', '[mcp_servers.ornelyon.env]', `ORNELYON_HOME = ${toml(home)}`] : []),
   ].join('\n');
 }

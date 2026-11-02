@@ -291,6 +291,8 @@ node dist/interface/cli.js mcp --print-config                      # prints the 
 node dist/interface/cli.js mcp --print-config --allow-task <id>    # a chosen task
 ```
 
+**Native GUI use (v0.5.0 Phase 0).** `--print-config` also prints a Codex `config.toml` block (shared by the Codex app, IDE extension and CLI) and the Claude desktop Code tab note. `node dist/interface/cli.js mcp --self-test` starts the server as a client would and reports PASS/FAIL, with no model call. A live connection from a GUI is still NOT_TESTED. Steps, evidence and limits: [docs/NATIVE_GUI_INTEGRATION.md](docs/NATIVE_GUI_INTEGRATION.md).
+
 **Protocol.** Speaks the MCP versions 2025-11-25, 2025-06-18, 2025-03-26 and 2024-11-05 over stdio (its own handler, checked against the official TypeScript SDK client). It does **not** implement the 2026-07-28 revision (no `server/discover`; that revision removed `initialize`). A client that speaks both eras falls back to `initialize` when `server/discover` is answered with "method not found", which this server does; a client that speaks only 2026-07-28 cannot use it.
 
 **Moving from v0.4.0:** a registration made with v0.4.0 had no scope, so with v0.4.1 it sees **no task**. Register again with `--recent N` or `--allow-task`. Content mode that you used before now also needs a scope and refuses `--all-tasks`.

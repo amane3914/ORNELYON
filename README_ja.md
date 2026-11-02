@@ -296,6 +296,8 @@ node dist/interface/cli.js mcp --print-config --allow-task <id>    # 指定タ�
 
 ツール定義は呼び出し側 Agent のコンテキストに入ります（短い 6 件、約 850 トークン）。ツール呼び出しでモデルは起動しません。
 
+
+**ネイティブGUI連携(v0.5.0 Phase 0)。** `--print-config` は Codex の `config.toml` 用ブロック(Codexアプリ・IDE拡張・CLIで共通)と Claude デスクトップ Code タブ向けの案内も出力します。`node dist/interface/cli.js mcp --self-test` はクライアントと同じ方法でサーバーを起動して PASS/FAIL を報告します(モデル呼び出しなし)。GUIからの実接続は引き続き NOT_TESTED です。手順・確認結果・制約: [docs/NATIVE_GUI_INTEGRATION.md](docs/NATIVE_GUI_INTEGRATION.md)(英語)。
 ## Efficiency Benchmark（v0.4）
 
 `ornelyon benchmark` は **履歴** から測定します。Agent は呼ばず、何も書き込みません。
