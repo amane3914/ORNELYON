@@ -41,7 +41,8 @@ const USAGE = `ORNELYON
 
 Usage:
   ornelyon gui [--port N]                 Start the local setup and dashboard (127.0.0.1 only)
-  ornelyon doctor [--name <entry>]        Check runtime, agents, sign-in state, setup and the MCP / GUI registration (looks only)
+  ornelyon doctor [--name <entry>] [--probe-registration]
+                                          Diagnose setup and MCP registration. --probe-registration may launch named Claude MCP servers; off by default.
   ornelyon run "<prompt>" [options]       Run one task. Prints the result and its evidence.
       --agent codex|claude|local          Agent to use (L1 manual mode, or the main agent)
       --kind <label>                      Task category for routing, e.g. code
@@ -112,7 +113,7 @@ function flagAll(args: string[], name: string): string[] {
 }
 
 /** Flags that take no value. Every other `--flag` consumes the next argument. */
-const BOOLEAN_FLAGS = new Set(['--allow-write', '--yes', '--require-review', '--dry-run', '--override', '--accept-current-state', '--preview', '--expose-content', '--print-config', '--json']);
+const BOOLEAN_FLAGS = new Set(['--allow-write', '--yes', '--require-review', '--dry-run', '--override', '--accept-current-state', '--preview', '--expose-content', '--print-config', '--json', '--probe-registration']);
 
 function positional(args: string[]): string[] {
   const out: string[] = [];
@@ -145,8 +146,12 @@ async function cmdDoctor(args: string[]): Promise<number> {
     console.log(`[${mark}] ${c.label}: ${c.detail}${c.fix ? `\n       fix: ${c.fix}` : ''}`);
   }
   console.log(setupCanComplete(checks) ? 'Setup can be completed.' : 'Setup has errors. Fix them in `ornelyon gui`.');
-  // The GUI integration section only looks. Repairs are printed as commands for you to run; nothing is changed.
-  const mcp = await diagnoseMcp(fileURLToPath(import.meta.url), loaded.config, ['ornelyon', ...flagAll(args, '--name')]);
+  // A Claude registration probe may launch arbitrary configured commands; it requires explicit opt-in.
+  const probeRegistration = args.includes('--probe-registration');
+  if (probeRegistration) {
+    console.log('WARNING: --probe-registration may launch the registered Claude MCP server command.');
+  }
+  const mcp = await diagnoseMcp(fileURLToPath(import.meta.url), loaded.config, ['ornelyon', ...flagAll(args, '--name')], undefined, probeRegistration);
   console.log('\nORNELYON MCP / GUI integration (diagnosis only, nothing is changed):');
   for (const i of mcp) {
     console.log(`[${i.status.padEnd(10)}] ${i.label}: ${i.detail}${i.fix ? `\n             fix: ${i.fix}` : ''}`);
