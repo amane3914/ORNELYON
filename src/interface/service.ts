@@ -3,7 +3,7 @@ import { mkdirSync, accessSync, constants } from 'node:fs';
 import { arch, release, platform } from 'node:os';
 
 import type { AgentKey, ChimeraConfig } from '../core/config.js';
-import { appendRecord, readRecords, type HandoffMeta, type RunRecord } from '../core/history.js';
+import { appendRecord, CALL_ROLES, readRecords, type HandoffMeta, type RunRecord } from '../core/history.js';
 import { historyPath, resolveWorkspacePath } from '../core/paths.js';
 import { envSecrets, redact } from '../core/redact.js';
 import type { DetectionResult } from '../core/types.js';
@@ -770,4 +770,57 @@ export function continuationAssessment(config: ChimeraConfig, passport: TaskPass
     reasons.push(`${drift.length} file(s) named by the passport differ from the workspace now.`);
   }
   return { state: blocked ? 'BLOCKED' : reasons.length > 0 ? 'CAUTION' : 'CLEAR', reasons, historyState, passportCurrent, openIssueCount, nextStepRecorded, drift };
+}
+
+/**
+ * A user task with call records but no final `summary` record. That is all this is known to be: the run may still be
+ * going, or it may have ended without writing its final record (killed process, closed window, power loss). History
+ * cannot tell these apart, so the state is never called "interrupted", and nothing here is a statement about the work.
+ */
+export interface IncompleteTask {
+  groupId: string;
+  state: 'NO_FINAL_RECORD';
+  lastRecordedAt: string;
+  /** Whole minutes since the newest record; a hint for "may still be running", not proof either way. */
+  minutesSinceLastRecord: number;
+  calls: number;
+  lastAgent: string;
+  lastCallStatus: string;
+  kind: string | null;
+}
+
+/** Tasks with call records and no summary, newest activity first. `allow` is the caller's own scope, applied before the limit. */
+export function incompleteTasks(records: RunRecord[], limit: number, now: Date, allow: (groupId: string) => boolean = () => true): IncompleteTask[] {
+  const finished = new Set<string>();
+  const groups = new Map<string, RunRecord[]>();
+  for (const r of records) {
+    if (r.role === 'summary') {
+      finished.add(r.groupId);
+    } else if (CALL_ROLES.includes(r.role)) {
+      const list = groups.get(r.groupId) ?? [];
+      list.push(r);
+      groups.set(r.groupId, list);
+    }
+  }
+  const out: IncompleteTask[] = [];
+  for (const [groupId, list] of groups) {
+    if (finished.has(groupId) || !allow(groupId)) {
+      continue;
+    }
+    const last = list[list.length - 1];
+    const at = Date.parse(last.recordedAt);
+    out.push({
+      groupId,
+      state: 'NO_FINAL_RECORD',
+      lastRecordedAt: last.recordedAt,
+      minutesSinceLastRecord: Number.isNaN(at) ? -1 : Math.max(0, Math.floor((now.getTime() - at) / 60000)),
+      calls: list.length,
+      lastAgent: last.result.agent,
+      lastCallStatus: last.result.status,
+      kind: last.kind,
+    });
+  }
+  // Newest activity first; the id breaks ties so the order is stable.
+  out.sort((x, y) => (x.lastRecordedAt < y.lastRecordedAt ? 1 : x.lastRecordedAt > y.lastRecordedAt ? -1 : x.groupId.localeCompare(y.groupId)));
+  return out.slice(0, limit);
 }

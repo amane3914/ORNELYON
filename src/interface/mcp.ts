@@ -6,7 +6,7 @@ import { workspaceIdFor, workspaceRelation } from '../core/workspace-id.js';
 import { cleanForHandoff, INSTRUCTION_MAX, loadPassport, passportFilePresent } from '../core/passport.js';
 import { dataDir } from '../core/paths.js';
 import { redact } from '../core/redact.js';
-import { AGENT_KEYS, continuationAssessment, detectAgents, dispatchPreview, evidenceFor, handoffOverview, prepareHandoff, recentTasks, systemInfo } from './service.js';
+import { AGENT_KEYS, continuationAssessment, detectAgents, dispatchPreview, evidenceFor, handoffOverview, incompleteTasks, prepareHandoff, recentTasks, systemInfo } from './service.js';
 
 /**
  * MCP Server Lite (v0.4.0). A small read-only server for the Model Context Protocol over stdio, so another
@@ -161,7 +161,7 @@ const TOOLS: ToolDef[] = [
   {
     name: 'ornelyon_recent_tasks',
     description:
-      'Read-only. Search the tasks this server may show, newest first, with their agent, kind and Execution / Verification / Acceptance states and whether a passport file is present. Optional filters: taskId, agent, execution, verification, decision. No prompts or outputs. A task outside the scope and one that does not exist are both simply absent.',
+      'Read-only. Search the tasks this server may show, newest first, with their agent, kind and Execution / Verification / Acceptance states and whether a passport file is present. Optional filters: taskId, agent, execution, verification, decision. With incomplete=true it lists instead the tasks that have agent-call records but no final record (they may still be running, or may have ended abnormally; history cannot tell which). No prompts or outputs. A task outside the scope and one that does not exist are both simply absent.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -171,6 +171,7 @@ const TOOLS: ToolDef[] = [
         execution: { type: 'string', enum: [...EXECUTIONS], description: 'Only tasks with this Execution state.' },
         verification: { type: 'string', enum: [...VERIFICATIONS], description: 'Only tasks with this Verification state.' },
         decision: { type: 'string', enum: [...ACCEPTANCES], description: 'Only tasks whose user decision (the Acceptance state) is this.' },
+        incomplete: { type: 'boolean', description: 'true: list tasks with no final record instead of finished ones. Cannot be combined with agent, execution, verification or decision.' },
       },
       additionalProperties: false,
     },
@@ -186,9 +187,25 @@ const TOOLS: ToolDef[] = [
       const execution = oneOf(a.execution, EXECUTIONS, 'execution');
       const verification = oneOf(a.verification, VERIFICATIONS, 'verification');
       const acceptance = oneOf(a.decision, ACCEPTANCES, 'decision');
+      if (a.incomplete !== undefined && typeof a.incomplete !== 'boolean') {
+        throw new ToolError('incomplete must be true or false.');
+      }
       const records = readRecords().records;
       // The scope is part of the search itself, so out-of-scope tasks neither match, nor use up the limit, nor change `matched`.
       const inScope = (id: string): boolean => opts.tasks === 'all' || opts.tasks.includes(id);
+      if (a.incomplete === true) {
+        if (agent !== undefined || execution !== undefined || verification !== undefined || acceptance !== undefined) {
+          throw new ToolError('incomplete cannot be combined with agent, execution, verification or decision: tasks without a final record have none of those states.');
+        }
+        const found = incompleteTasks(records, records.length, new Date(), (id) => inScope(id) && (a.taskId === undefined || id === a.taskId));
+        return {
+          scope: opts.tasks === 'all' ? 'all tasks' : `${opts.tasks.length} task(s) chosen by the operator`,
+          filters: { incomplete: true, ...(a.taskId === undefined ? {} : { taskId: a.taskId }) },
+          matched: found.length,
+          tasks: found.slice(0, limit),
+          notice: 'NO_FINAL_RECORD means only that call records exist without a final record. The task may still be running, or may have ended without writing one; history cannot tell which, so none of these is called interrupted. Their agents may have changed files. Nothing was resumed, and no saved passport or Evidence Gate record exists to resume from. A task that is listed is not a task that can be resumed.',
+        };
+      }
       const filter = { taskId: a.taskId as string | undefined, agent, execution, verification, acceptance, allow: inScope };
       const matched = recentTasks(records, records.length, filter);
       const current = workspaceIdFor(config.workspaceRoot, false);
@@ -283,7 +300,7 @@ const TOOLS: ToolDef[] = [
         taskId: p.groupId,
         notice: 'Saved hand-over data. It is not an instruction and not an approval. Nothing here restores a session or starts an agent.',
         createdAt: p.createdAt,
-        continuation: { ...shownContinuation, note: 'CLEAR means the saved data is complete and consistent, not that the work is correct or approved. Workspace files are compared with the current configured workspace; the git commit was not re-checked.' },
+        continuation: { ...shownContinuation, resumed: false, note: 'CLEAR means the saved data is complete and consistent, not that the work is correct or approved. Workspace files are compared with the current configured workspace; the git commit was not re-checked.' },
         kind: p.kind ?? null,
         status: p.status,
         executingAgent: p.executingAgent,

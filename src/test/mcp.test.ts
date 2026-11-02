@@ -730,3 +730,83 @@ test('evidence: a rejected task, an unreadable history and a hidden check name a
   const outside = await tool(s2, 'ornelyon_evidence', { taskId: env.groupId });
   assert.equal(unknown.text, outside.text);
 });
+
+// ---------- v0.6.0 Phase 1: tasks without a final record, and resume preview ----------
+
+/** Call records only, as a run that never reached its summary leaves behind. */
+function makeUnfinished(o: { minutesAgo?: number; calls?: number; agent?: 'codex' | 'claude' } = {}): string {
+  const id = randomUUID();
+  for (let i = 0; i < (o.calls ?? 1); i += 1) {
+    const at = new Date(Date.now() - ((o.minutesAgo ?? 0) * 60000) + i * 1000).toISOString();
+    appendRecord({ recordedAt: at, role: i === 0 ? 'task' : 'review', groupId: id, mode: 'L1', kind: 'code', prompt: 'SYNTHETIC-UNFINISHED-PROMPT', result: { taskId: randomUUID(), agent: o.agent ?? 'codex', status: 'success', output: 'UNFINISHED-OUTPUT', model: null, errorKind: null, errorMessage: null, errorSignature: null, usage: { inputTokens: 1, outputTokens: 1 }, costUsd: 0, startedAt: at, durationMs: 1 } });
+  }
+  return id;
+}
+
+test('incomplete tasks: only call records without a summary are listed, and none is called interrupted', async () => {
+  const env = await setup();
+  const done = await makeTask(env);
+  const a = makeUnfinished({ minutesAgo: 90, calls: 2, agent: 'claude' });
+  const b = makeUnfinished({ minutesAgo: 1 });
+  const hidden = makeUnfinished();
+  const s = await ready({ tasks: [done, a, b] });
+  type L = { matched: number; tasks: { groupId: string; state: string; calls: number; lastAgent: string; minutesSinceLastRecord: number }[]; notice: string };
+  const r = await tool(s, 'ornelyon_recent_tasks', { incomplete: true });
+  assert.equal(r.isError, false);
+  const j = r.json as unknown as L;
+  assert.equal(j.matched, 2, 'a finished task and an out-of-scope one are not listed');
+  assert.deepEqual(j.tasks.map((t) => t.groupId), [b, a], 'newest activity first');
+  assert.ok(j.tasks.every((t) => t.state === 'NO_FINAL_RECORD'));
+  assert.equal(j.tasks[1].calls, 2);
+  assert.equal(j.tasks[1].lastAgent, 'claude');
+  assert.ok(j.tasks[1].minutesSinceLastRecord >= 89 && j.tasks[0].minutesSinceLastRecord <= 2);
+  assert.ok(!/"interrupted/i.test(JSON.stringify(j.tasks)), 'no row claims an interruption');
+  assert.match(j.notice, /may still be running/);
+  assert.match(j.notice, /not a task that can be resumed/);
+  assert.ok(!r.text.includes('SYNTHETIC-UNFINISHED-PROMPT') && !r.text.includes('UNFINISHED-OUTPUT'), 'no prompt or output');
+  assert.ok(!r.text.includes(hidden), 'out of scope is absent');
+  assert.equal(((await tool(s, 'ornelyon_recent_tasks', { incomplete: true, taskId: hidden })).json as { matched: number }).matched, 0, 'same as a nonexistent task');
+  const normal = (await tool(s, 'ornelyon_recent_tasks', {})).json as unknown as { tasks: { groupId: string }[] };
+  assert.deepEqual(normal.tasks.map((t) => t.groupId), [done]);
+});
+
+test('incomplete tasks: a task that later gets a summary leaves the list; the flag cannot be mixed with state filters', async () => {
+  await setup();
+  const id = makeUnfinished();
+  const s = await ready({ tasks: [id] });
+  assert.equal(((await tool(s, 'ornelyon_recent_tasks', { incomplete: true })).json as { matched: number }).matched, 1);
+  const rec = readRecords().records.find((r) => r.groupId === id);
+  assert.ok(rec);
+  appendRecord({ ...rec, role: 'summary', evidence: initialEvidence({ status: 'success', sandbox: 'read-only', verificationRequired: false, checks: [], changedFiles: [] }), notes: [], recordedAt: new Date().toISOString() });
+  assert.equal(((await tool(s, 'ornelyon_recent_tasks', { incomplete: true })).json as { matched: number }).matched, 0);
+  for (const bad of [{ agent: 'codex' }, { execution: 'SUCCESS' }, { verification: 'PASS' }, { decision: 'PENDING' }]) {
+    assert.equal((await tool(s, 'ornelyon_recent_tasks', { incomplete: true, ...bad })).isError, true, JSON.stringify(bad));
+  }
+  assert.equal((await tool(s, 'ornelyon_recent_tasks', { incomplete: 'yes' })).isError, true);
+});
+
+test('resume preview: an unfinished task has nothing to resume from, and a finished one says nothing was resumed', async () => {
+  const env = await setup();
+  const id = makeUnfinished();
+  const done = await makeTask(env);
+  const s = await ready({ tasks: [id, done] });
+  const none = await tool(s, 'ornelyon_passport', { taskId: id });
+  assert.equal(none.isError, true, 'no passport exists for a task without a final record');
+  assert.ok(!none.text.includes('SYNTHETIC-UNFINISHED-PROMPT'));
+  assert.equal((await tool(s, 'ornelyon_evidence', { taskId: id })).isError, true, 'no Evidence Gate record is invented');
+  const p = (await tool(s, 'ornelyon_passport', { taskId: done })).json as { continuation: { resumed: boolean; state: string } };
+  assert.equal(p.continuation.resumed, false);
+  assert.ok(['CLEAR', 'CAUTION', 'BLOCKED'].includes(p.continuation.state));
+  assert.equal((await tool(s, 'ornelyon_handoff_preview', { taskId: id, to: 'claude' })).isError, true);
+});
+
+test('incomplete tasks: the scan stays cheap on a large history', async () => {
+  await setup();
+  const ids = Array.from({ length: 300 }, () => makeUnfinished());
+  const s = await ready({ tasks: ids });
+  const t0 = Date.now();
+  const r = (await tool(s, 'ornelyon_recent_tasks', { incomplete: true, limit: 20 })).json as { matched: number; tasks: unknown[] };
+  assert.ok(Date.now() - t0 < 3000);
+  assert.equal(r.matched, 300);
+  assert.equal(r.tasks.length, 20);
+});
