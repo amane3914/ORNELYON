@@ -79,6 +79,8 @@ node dist/interface/cli.js cost
 node dist/interface/cli.js tool WebFetch DORMANT
 ```
 
+**MCP diagnosis safety:** `doctor` does not invoke `claude mcp get` by default, because that command may start the configured MCP server. Only use `node dist/interface/cli.js doctor --probe-registration` after you trust the registered ORNELYON-named command. This opt-in does not guarantee that the configured command is safe. Repairs are never applied automatically.
+
 ## Install presets
 
 | Preset | What it turns on |
