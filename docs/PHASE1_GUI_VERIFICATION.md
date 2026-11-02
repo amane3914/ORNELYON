@@ -1,6 +1,6 @@
 # Phase 1 plan: live GUI verification of the ORNELYON MCP server
 
-Status: **prepared, not run.** Nothing here has been done against a GUI. Every step below that changes a real client setting needs the owner's approval first. Steps marked PAID start a model turn on the owner's own sign-in and also need approval.
+Status: **partial verification completed (2026-11-02).** Codex engine and Claude Code CLI connectivity are verified. The owner subsequently confirmed that the Codex app GUI lists the registered test server as enabled. The Codex GUI tool list, Claude Desktop Code-tab connection, GUI restart persistence, and model-mediated tool calls remain NOT_TESTED. The procedure below is retained as a verification checklist; any subsequent real-setting changes require owner approval. Model-mediated tests remain prohibited in this phase.
 
 Background and Phase 0 evidence: [NATIVE_GUI_INTEGRATION.md](NATIVE_GUI_INTEGRATION.md).
 
@@ -123,3 +123,12 @@ Register again (same commands as `--print-config`, name `ornelyon-phase1-test`, 
 - Re-registered `ornelyon-phase1-test` in Claude Code (user scope) and Codex with the same synthetic task. Claude `mcp list`: Connected. Codex 0.166.0 engine, scratch config: 6 tools, all read-only; broken-path and instant-exit entries failed as before. Existing servers unchanged (Codex 7 plus the test entry, Claude 2 plus the test entry).
 - Attaching to the live Codex app's app-server through `codex app-server proxy` did not answer `initialize` within 25 s (INCONCLUSIVE; not pursued, so it says nothing about what the app window shows).
 - GUI windows: NOT operated. The Codex app permission was declined earlier and was not requested again; the Claude desktop app cannot be operated by this session. **The test registration was left in place on purpose so that the manual checklist above can be run.** Remove it afterwards with the two `remove` commands.
+
+## Owner-observed screens (2026-11-02, after second run)
+
+- **Codex official app GUI: PASS for registration display only.** The Plugins / MCP page shows `ornelyon-phase1-test` with the enable switch on. Its settings page shows the registered launch command and scoped arguments. The screen does **not** display a six-tool list or prove that a model turn can call a tool.
+- **Claude Code CLI: PASS for six-tool recognition.** The owner opened `/mcp` in Claude Code CLI v2.1.311 and saw `ornelyon-phase1-test` with six tools and a connected checkmark.
+- **Claude Desktop Code tab: NOT_TESTED for MCP recognition.** The owner entered `/mcp` in the Code tab, which opened the general Connectors settings rather than displaying the locally registered server. No evidence yet establishes whether the server is available inside a Desktop Code session.
+- **GUI restarts and model-mediated tool invocations: NOT_TESTED.** No paid model turn was made.
+
+Do not upgrade any of these narrower observations into a claim that both GUI clients successfully called all six tools.
