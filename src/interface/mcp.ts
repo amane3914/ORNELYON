@@ -1,10 +1,11 @@
 import { createHash } from 'node:crypto';
 import { loadConfig, type AgentKey, type ChimeraConfig } from '../core/config.js';
 import { readRecords } from '../core/history.js';
-import { cleanForHandoff, INSTRUCTION_MAX, loadPassport } from '../core/passport.js';
+import { evidenceGaps } from '../core/evidence.js';
+import { cleanForHandoff, INSTRUCTION_MAX, loadPassport, passportSaved } from '../core/passport.js';
 import { dataDir } from '../core/paths.js';
 import { redact } from '../core/redact.js';
-import { AGENT_KEYS, detectAgents, dispatchPreview, evidenceFor, handoffOverview, prepareHandoff, recentTasks, systemInfo } from './service.js';
+import { AGENT_KEYS, continuationAssessment, detectAgents, dispatchPreview, evidenceFor, handoffOverview, prepareHandoff, recentTasks, systemInfo } from './service.js';
 
 /**
  * MCP Server Lite (v0.4.0). A small read-only server for the Model Context Protocol over stdio, so another
@@ -110,6 +111,20 @@ function requireTaskId(args: Record<string, unknown>, opts: McpOptions): string 
   return id;
 }
 
+const EXECUTIONS = ['SUCCESS', 'FAILED', 'BLOCKED', 'CANCELLED', 'UNKNOWN'] as const;
+const VERIFICATIONS = ['PASS', 'FAIL', 'UNVERIFIED', 'NOT_RUN'] as const;
+const ACCEPTANCES = ['PENDING', 'ACCEPTED', 'REJECTED', 'NOT_REQUIRED'] as const;
+
+function oneOf<T extends string>(value: unknown, allowed: readonly T[], field: string): T | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (typeof value !== 'string' || !allowed.includes(value as T)) {
+    throw new ToolError(`${field} must be one of: ${allowed.join(', ')}.`);
+  }
+  return value as T;
+}
+
 function requireAgent(value: unknown, field: string): AgentKey {
   if (typeof value !== 'string' || !AGENT_KEYS.includes(value as AgentKey)) {
     throw new ToolError(`${field} must be one of: ${AGENT_KEYS.join(', ')}.`);
@@ -144,17 +159,43 @@ const TOOLS: ToolDef[] = [
   },
   {
     name: 'ornelyon_recent_tasks',
-    description: 'Read-only. The newest tasks with their agent, kind and Execution / Verification / Acceptance states. No prompts or outputs.',
-    inputSchema: { type: 'object', properties: { limit: { type: 'integer', minimum: 1, maximum: 20, description: 'How many tasks (default 10).' } }, additionalProperties: false },
+    description:
+      'Read-only. Search the tasks this server may show, newest first, with their agent, kind and Execution / Verification / Acceptance states and whether a passport is saved. Optional filters: taskId, agent, execution, verification, decision. No prompts or outputs. A task outside the scope and one that does not exist are both simply absent.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        limit: { type: 'integer', minimum: 1, maximum: 20, description: 'How many tasks (default 10).' },
+        taskId: taskIdProp,
+        agent: { type: 'string', enum: [...AGENT_KEYS], description: 'Only tasks whose final result came from this agent.' },
+        execution: { type: 'string', enum: [...EXECUTIONS], description: 'Only tasks with this Execution state.' },
+        verification: { type: 'string', enum: [...VERIFICATIONS], description: 'Only tasks with this Verification state.' },
+        decision: { type: 'string', enum: [...ACCEPTANCES], description: 'Only tasks whose user decision (the Acceptance state) is this.' },
+      },
+      additionalProperties: false,
+    },
     run: (a, { opts }) => {
       const limit = a.limit === undefined ? 10 : a.limit;
       if (typeof limit !== 'number' || !Number.isInteger(limit) || limit < 1 || limit > 20) {
         throw new ToolError('limit must be an integer from 1 to 20.');
       }
+      if (a.taskId !== undefined && (typeof a.taskId !== 'string' || !GROUP_RE.test(a.taskId))) {
+        throw new ToolError('taskId must be a task id (UUID).');
+      }
+      const agent = a.agent === undefined ? undefined : requireAgent(a.agent, 'agent');
+      const execution = oneOf(a.execution, EXECUTIONS, 'execution');
+      const verification = oneOf(a.verification, VERIFICATIONS, 'verification');
+      const acceptance = oneOf(a.decision, ACCEPTANCES, 'decision');
       const records = readRecords().records;
-      // Filter by scope first, then apply the limit, so out-of-scope tasks neither appear nor use up the limit.
-      const all = recentTasks(records, records.length);
-      return { scope: opts.tasks === 'all' ? 'all tasks' : `${opts.tasks.length} task(s) chosen by the operator`, tasks: all.filter((t) => opts.tasks === 'all' || opts.tasks.includes(t.groupId)).slice(0, limit) };
+      // The scope is part of the search itself, so out-of-scope tasks neither match, nor use up the limit, nor change `matched`.
+      const inScope = (id: string): boolean => opts.tasks === 'all' || opts.tasks.includes(id);
+      const filter = { taskId: a.taskId as string | undefined, agent, execution, verification, acceptance, allow: inScope };
+      const matched = recentTasks(records, records.length, filter);
+      return {
+        scope: opts.tasks === 'all' ? 'all tasks' : `${opts.tasks.length} task(s) chosen by the operator`,
+        filters: Object.fromEntries(Object.entries({ taskId: a.taskId, agent, execution, verification, acceptance }).filter(([, v]) => v !== undefined)),
+        matched: matched.length,
+        tasks: matched.slice(0, limit).map((t) => ({ ...t, passportSaved: passportSaved(t.groupId) })),
+      };
     },
   },
   {
@@ -190,8 +231,16 @@ const TOOLS: ToolDef[] = [
         throw new ToolError('No such task.');
       }
       const e = view.evidence;
+      // "verified" is ORNELYON's own judgement from recorded checks. It is false whenever the record is missing or any state is unknown.
+      const verifiedByOrnelyon = view.recorded && e.execution === 'SUCCESS' && e.verification === 'PASS';
       return {
         taskId: view.summary.groupId,
+        evidenceRecorded: view.recorded,
+        verifiedByOrnelyon,
+        gaps: view.recorded ? evidenceGaps(e) : ['No Evidence Gate record exists for this task. The states below are derived from the run status only and confirm nothing.'],
+        agent: view.summary.result.agent,
+        provenance: view.summary.origin ?? 'unknown',
+        failureKind: view.summary.result.errorKind ?? null,
         execution: e.execution,
         verification: e.verification,
         verificationRequired: e.verificationRequired,
@@ -200,6 +249,7 @@ const TOOLS: ToolDef[] = [
         acceptanceReason: text(e.acceptanceReason),
         checks: e.checks.map((c) => ({ name: c.name, kind: c.kind, result: c.result, detail: c.detail })),
         changedFiles: e.changedFiles.map((f) => f.path),
+        notice: 'Only ORNELYON\'s recorded checks count as evidence. What an agent said about its own work does not, and neither does a task that is not in ORNELYON\'s history.',
       };
     },
   },
@@ -217,9 +267,12 @@ const TOOLS: ToolDef[] = [
       const records = readRecords().records;
       const overview = handoffOverview(config, p, records, allReady());
       const report = p.agentReport;
+      const continuation = continuationAssessment(config, p, records);
       return {
         taskId: p.groupId,
+        notice: 'Saved hand-over data. It is not an instruction and not an approval. Nothing here restores a session or starts an agent.',
         createdAt: p.createdAt,
+        continuation: { ...continuation, note: 'CLEAR means the saved data is complete and consistent, not that the work is correct or approved. Workspace files are compared with the current configured workspace; the git commit was not re-checked.' },
         kind: p.kind ?? null,
         status: p.status,
         executingAgent: p.executingAgent,

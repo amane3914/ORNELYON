@@ -421,16 +421,16 @@ export function decideTask(
  * The current evidence for a task, read from history. Tasks run before v0.2 are shown as
  * UNVERIFIED or NOT_RUN with no checks, and stay PENDING, so a user can still decide on them.
  */
-export function evidenceFor(groupId: string): { summary: RunRecord; evidence: Evidence } | null {
+export function evidenceFor(groupId: string): { summary: RunRecord; evidence: Evidence; recorded: boolean } | null {
   const records = readRecords().records;
   const summary = [...records].reverse().find((r) => r.groupId === groupId && r.role === 'summary');
   if (!summary) {
     return null;
   }
-  const evidence =
-    latestEvidence(records, groupId) ??
-    initialEvidence({ status: summary.result.status, sandbox: 'workspace-write', verificationRequired: false, checks: [], changedFiles: [] });
-  return { summary, evidence };
+  const recorded = latestEvidence(records, groupId);
+  // Without a recorded Evidence Gate result the states are derived from the run status alone. `recorded` says so.
+  const evidence = recorded ?? initialEvidence({ status: summary.result.status, sandbox: 'workspace-write', verificationRequired: false, checks: [], changedFiles: [] });
+  return { summary, evidence, recorded: recorded !== null };
 }
 
 /** Build and save the passport for a task group from its history. */
@@ -648,8 +648,18 @@ export interface RecentTask {
   acceptance: Evidence['acceptance'];
 }
 
+/** Optional narrowing for `recentTasks`. Every given field must match. `allow` is how a caller applies its own scope before the limit. */
+export interface RecentFilter {
+  agent?: string;
+  execution?: Evidence['execution'];
+  verification?: Evidence['verification'];
+  acceptance?: Evidence['acceptance'];
+  taskId?: string;
+  allow?: (groupId: string) => boolean;
+}
+
 /** The newest user tasks, newest first. No prompt or output text: only identifiers and states. */
-export function recentTasks(records: RunRecord[], limit: number): RecentTask[] {
+export function recentTasks(records: RunRecord[], limit: number, filter: RecentFilter = {}): RecentTask[] {
   const out: RecentTask[] = [];
   const seen = new Set<string>();
   for (let i = records.length - 1; i >= 0 && out.length < limit; i -= 1) {
@@ -658,11 +668,89 @@ export function recentTasks(records: RunRecord[], limit: number): RecentTask[] {
       continue;
     }
     seen.add(r.groupId);
+    if ((filter.taskId !== undefined && r.groupId !== filter.taskId) || (filter.allow !== undefined && !filter.allow(r.groupId))) {
+      continue;
+    }
     const ev = latestEvidence(records, r.groupId) ?? r.evidence;
     if (!ev) {
+      continue;
+    }
+    if (
+      (filter.agent !== undefined && r.result.agent !== filter.agent) ||
+      (filter.execution !== undefined && ev.execution !== filter.execution) ||
+      (filter.verification !== undefined && ev.verification !== filter.verification) ||
+      (filter.acceptance !== undefined && ev.acceptance !== filter.acceptance)
+    ) {
       continue;
     }
     out.push({ groupId: r.groupId, recordedAt: r.recordedAt, kind: r.kind, agent: r.result.agent, execution: ev.execution, verification: ev.verification, acceptance: ev.acceptance });
   }
   return out;
+}
+
+export type ContinuationState = 'CLEAR' | 'CAUTION' | 'BLOCKED';
+
+export interface ContinuationAssessment {
+  state: ContinuationState;
+  /** Why, in plain words. Empty only for CLEAR. */
+  reasons: string[];
+  /** The latest state in history, which can be newer than the saved passport. Null when history holds no Evidence Gate record. */
+  historyState: { execution: Evidence['execution']; verification: Evidence['verification']; acceptance: Evidence['acceptance'] } | null;
+  passportCurrent: boolean;
+  openIssueCount: number;
+  nextStepRecorded: boolean;
+  /** Files the passport names whose content differs from the workspace now (paths only). */
+  drift: { path: string; state: 'CHANGED' | 'MISSING_NOW' }[];
+}
+
+/**
+ * Can the saved data of a task be picked up again, and what should be looked at first? Read-only, from the
+ * verified passport, the history and the current workspace files. It restores no session and starts nothing.
+ * CLEAR means the saved data is complete and consistent. It is not an approval and not an instruction.
+ */
+export function continuationAssessment(config: ChimeraConfig, passport: TaskPassport, records: RunRecord[]): ContinuationAssessment {
+  const reasons: string[] = [];
+  let blocked = false;
+  const latest = latestEvidence(records, passport.groupId);
+  const historyState = latest ? { execution: latest.execution, verification: latest.verification, acceptance: latest.acceptance } : null;
+  const saved = passport.status;
+  const passportCurrent = historyState === null || (historyState.execution === saved.execution && historyState.verification === saved.verification && historyState.acceptance === saved.acceptance);
+  const now = historyState ?? saved;
+  if (historyState === null) {
+    reasons.push('No Evidence Gate record was found in history for this task; only the passport states are known.');
+  } else if (!passportCurrent) {
+    reasons.push('History shows a newer state than the saved passport. Save the passport again before relying on it.');
+  }
+  if (now.execution !== 'SUCCESS') {
+    blocked = true;
+    reasons.push(`Execution is ${now.execution}.`);
+  }
+  if (now.verification === 'FAIL') {
+    blocked = true;
+    reasons.push('Verification failed.');
+  } else if (now.verification !== 'PASS') {
+    reasons.push(`Verification is ${now.verification}; nothing is confirmed by ORNELYON's checks.`);
+  }
+  if (now.acceptance === 'REJECTED') {
+    blocked = true;
+    reasons.push('The user rejected this task.');
+  } else if (now.acceptance === 'PENDING') {
+    reasons.push('No user decision is recorded.');
+  }
+  const openIssueCount = passport.openIssues.length;
+  if (openIssueCount > 0) {
+    reasons.push(`${openIssueCount} open issue(s) are recorded.`);
+  }
+  const nextStepRecorded = passport.nextStep.trim() !== '';
+  if (!nextStepRecorded) {
+    reasons.push('No next step is recorded.');
+  }
+  if (passport.agentReport === undefined) {
+    reasons.push('The agent report was not recorded (passport saved before v0.3.1).');
+  }
+  const drift = passportDrift(passport, config.workspaceRoot).map((d) => ({ path: d.path, state: (d.actual === null ? 'MISSING_NOW' : 'CHANGED') as 'CHANGED' | 'MISSING_NOW' }));
+  if (drift.length > 0) {
+    reasons.push(`${drift.length} file(s) named by the passport differ from the workspace now.`);
+  }
+  return { state: blocked ? 'BLOCKED' : reasons.length > 0 ? 'CAUTION' : 'CLEAR', reasons, historyState, passportCurrent, openIssueCount, nextStepRecorded, drift };
 }

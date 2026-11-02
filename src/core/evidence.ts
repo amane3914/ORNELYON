@@ -167,3 +167,36 @@ export function latestEvidence<T extends { groupId: string; evidence?: Evidence 
   }
   return null;
 }
+
+/**
+ * Why a task is not (fully) verified, in plain words. Empty only when ORNELYON's own checks passed.
+ * It reads recorded states and checks only: an agent's statement is never an input here.
+ */
+export function evidenceGaps(e: Evidence): string[] {
+  const gaps: string[] = [];
+  if (e.execution !== 'SUCCESS') {
+    gaps.push(`Execution is ${e.execution}.`);
+  }
+  const failed = e.checks.filter((c) => c.result === 'FAIL').map((c) => c.name);
+  const unconfirmed = e.checks.filter((c) => c.result === 'UNVERIFIED').map((c) => c.name);
+  if (failed.length > 0) {
+    gaps.push(`Failed check(s): ${failed.join(', ')}.`);
+  }
+  if (unconfirmed.length > 0) {
+    gaps.push(`Check(s) that could not be confirmed: ${unconfirmed.join(', ')}.`);
+  }
+  if (e.verification === 'NOT_RUN') {
+    gaps.push('No verification was run, so nothing is confirmed.');
+  } else if (e.verification === 'UNVERIFIED' && e.checks.length === 0) {
+    gaps.push('Verification was required but no check was recorded.');
+  }
+  if (e.acceptance === 'PENDING') {
+    gaps.push('No user decision is recorded.');
+  } else if (e.acceptance === 'REJECTED') {
+    gaps.push('The user rejected this task.');
+  }
+  if (e.overrideUsed) {
+    gaps.push('The user accepted despite a failed or missing required check.');
+  }
+  return gaps;
+}
