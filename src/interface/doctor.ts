@@ -9,9 +9,11 @@ import { selfTest } from './mcp-selftest.js';
 
 /**
  * Diagnosis of the ORNELYON MCP / native-GUI setup. It only looks: it never registers, removes or edits a client
- * setting, and it starts nothing but this build's own self-test, `codex mcp list --json` and `claude mcp get <name>`.
- * Note that `claude mcp get` checks the health of the entry and so launches the registered server command; for that reason it is
- * only asked about entries whose name starts with "ornelyon", and it runs from the home folder so that a project's .mcp.json is not picked up. Every item carries the exact command that would repair it; running that command is up to the user.
+ * setting. By default it runs its own self-test, `codex mcp list --json`, and `claude --version`.
+ * `claude mcp get` can launch the registered server (which may be an arbitrary command), so it is NEVER
+ * invoked unless the operator explicitly opts into --probe-registration. Even then only names starting
+ * with "ornelyon" are queried, from the home folder rather than a project directory.
+ * Repairs are only described, never executed.
  */
 export type DoctorStatus = 'PASS' | 'FAIL' | 'WARN' | 'UNKNOWN' | 'NOT_TESTED';
 
@@ -159,7 +161,7 @@ const defaultRun: Run = async (command, args) => {
 };
 
 /** Registrations of ORNELYON in the installed clients. `names` are the entries to look for in Claude Code. */
-export async function findRegistrations(names: string[], run: Run = defaultRun): Promise<{ regs: Registration[]; notes: DoctorItem[] }> {
+export async function findRegistrations(names: string[], run: Run = defaultRun, probeRegistration = false): Promise<{ regs: Registration[]; notes: DoctorItem[] }> {
   const regs: Registration[] = [];
   const notes: DoctorItem[] = [];
   const codex = await run('codex', ['mcp', 'list', '--json']);
@@ -173,6 +175,14 @@ export async function findRegistrations(names: string[], run: Run = defaultRun):
   const claude = await run('claude', ['--version']);
   if (claude.code === null) {
     notes.push({ id: 'claude:cli', label: 'Claude Code found', status: 'NOT_TESTED', detail: 'claude is not on PATH, so its registration was not looked at.', fix: null });
+  } else if (!probeRegistration) {
+    notes.push({
+      id: 'claude:registration',
+      label: 'Claude Code MCP registration',
+      status: 'NOT_TESTED',
+      detail: 'Not probed: `claude mcp get` may launch the registered server command.',
+      fix: 'Only if you trust the registered command, rerun `ornelyon doctor --probe-registration` to check the named ORNELYON entries.',
+    });
   } else {
     for (const name of [...new Set(names)]) {
       if (!/^ornelyon[A-Za-z0-9._-]{0,40}$/i.test(name)) {
@@ -243,7 +253,7 @@ export function workspaceItem(config: ChimeraConfig): DoctorItem {
 }
 
 /** The whole MCP / GUI diagnosis. `cliPath` is this build's dist/interface/cli.js. */
-export async function diagnoseMcp(cliPath: string, config: ChimeraConfig, names: string[], run: Run = defaultRun): Promise<DoctorItem[]> {
+export async function diagnoseMcp(cliPath: string, config: ChimeraConfig, names: string[], run: Run = defaultRun, probeRegistration = false): Promise<DoctorItem[]> {
   const items: DoctorItem[] = [];
   const major = Number(process.versions.node.split('.')[0]);
   items.push({ id: 'node', label: 'Node.js 20 or newer (the one running this check)', status: major >= 20 ? 'PASS' : 'FAIL', detail: process.version, fix: major >= 20 ? null : 'Install Node.js 20 LTS.' });
@@ -258,7 +268,7 @@ export async function diagnoseMcp(cliPath: string, config: ChimeraConfig, names:
     detail: st.ok ? `${st.lines.length} step(s) passed` : failed.map((l) => l.replace(/^FAIL\s+/, '')).join('; ').split(homedir()).join('~'),
     fix: st.ok ? null : 'Run `npm run build`, then `node dist/interface/cli.js mcp --self-test` for the full list.',
   });
-  const { regs, notes } = await findRegistrations(names, run);
+  const { regs, notes } = await findRegistrations(names, run, probeRegistration);
   items.push(...notes);
   if (regs.length === 0) {
     items.push({
