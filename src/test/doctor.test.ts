@@ -162,8 +162,11 @@ test('doctor: only entries named ornelyon* are asked about (claude mcp get launc
     }
     return { code: 0, stdout: args[0] === '--version' ? '1.0' : 'No MCP server named' };
   };
-  const found = await findRegistrations(['ornelyon', 'blender'], run);
-  assert.ok(asked.some((a) => a === 'claude mcp get ornelyon'));
+  const defaultResult = await findRegistrations(['ornelyon', 'blender'], run);
+  assert.ok(!asked.some((a) => a.startsWith('claude mcp get ')), 'default diagnosis must never launch a registered MCP server');
+  assert.ok(defaultResult.notes.some((n) => n.id === 'claude:registration' && n.status === 'NOT_TESTED'));
+  const found = await findRegistrations(['ornelyon', 'blender'], run, true);
+  assert.ok(asked.some((a) => a === 'claude mcp get ornelyon'), 'explicit opt-in enables the named probe');
   assert.ok(!asked.some((a) => a.includes('blender')), 'a foreign entry is never asked about');
   assert.ok(found.notes.some((n) => n.status === 'NOT_TESTED' && n.id.includes('blender')));
   assert.equal(found.regs[0].command, 'node[31m.exe');
