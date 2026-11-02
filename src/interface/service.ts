@@ -9,6 +9,7 @@ import { envSecrets, redact } from '../core/redact.js';
 import type { DetectionResult } from '../core/types.js';
 import { decideAcceptance, initialEvidence, latestEvidence, type AcceptAction, type ChangedFile, type Evidence, type VerificationCheck } from '../core/evidence.js';
 import { isEmptySpec, runCommandChecks, runStateChecks, scopeCheck, type VerificationSpec } from '../core/verify.js';
+import { workspaceIdFor } from '../core/workspace-id.js';
 import { diffSnapshots, hashWorkspaceFile, snapshotGaps, snapshotWorkspace, type Snapshot } from '../core/workspace.js';
 import {
   buildHandoffContext,
@@ -362,6 +363,7 @@ export function startTask(
         recordedAt: new Date().toISOString(),
         role: 'summary',
         groupId,
+        ...workspaceField(root),
         mode: out.level,
         kind: params.kind,
         prompt: params.prompt,
@@ -638,8 +640,20 @@ export function dispatchPreview(config: ChimeraConfig, input: { kind: string | n
   };
 }
 
+/** The folder label for a new summary record. A failure to make one leaves the field out, which reads as UNKNOWN. */
+function workspaceField(root: string): { workspace?: string } {
+  try {
+    const id = workspaceIdFor(root, true);
+    return id === null ? {} : { workspace: id };
+  } catch {
+    return {};
+  }
+}
+
 export interface RecentTask {
   groupId: string;
+  /** The stored folder label, if any. Callers turn it into SAME / OTHER / UNKNOWN; it is not shown to clients. */
+  workspace: string | null;
   recordedAt: string;
   kind: string | null;
   agent: string;
@@ -683,7 +697,7 @@ export function recentTasks(records: RunRecord[], limit: number, filter: RecentF
     ) {
       continue;
     }
-    out.push({ groupId: r.groupId, recordedAt: r.recordedAt, kind: r.kind, agent: r.result.agent, execution: ev.execution, verification: ev.verification, acceptance: ev.acceptance });
+    out.push({ groupId: r.groupId, workspace: r.workspace ?? null, recordedAt: r.recordedAt, kind: r.kind, agent: r.result.agent, execution: ev.execution, verification: ev.verification, acceptance: ev.acceptance });
   }
   return out;
 }

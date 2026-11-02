@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { loadConfig, type AgentKey, type ChimeraConfig } from '../core/config.js';
 import { readRecords } from '../core/history.js';
 import { evidenceGaps, isVerified } from '../core/evidence.js';
+import { workspaceIdFor, workspaceRelation } from '../core/workspace-id.js';
 import { cleanForHandoff, INSTRUCTION_MAX, loadPassport, passportFilePresent } from '../core/passport.js';
 import { dataDir } from '../core/paths.js';
 import { redact } from '../core/redact.js';
@@ -173,7 +174,7 @@ const TOOLS: ToolDef[] = [
       },
       additionalProperties: false,
     },
-    run: (a, { opts }) => {
+    run: (a, { config, opts }) => {
       const limit = a.limit === undefined ? 10 : a.limit;
       if (typeof limit !== 'number' || !Number.isInteger(limit) || limit < 1 || limit > 20) {
         throw new ToolError('limit must be an integer from 1 to 20.');
@@ -190,11 +191,13 @@ const TOOLS: ToolDef[] = [
       const inScope = (id: string): boolean => opts.tasks === 'all' || opts.tasks.includes(id);
       const filter = { taskId: a.taskId as string | undefined, agent, execution, verification, acceptance, allow: inScope };
       const matched = recentTasks(records, records.length, filter);
+      const current = workspaceIdFor(config.workspaceRoot, false);
       return {
         scope: opts.tasks === 'all' ? 'all tasks' : `${opts.tasks.length} task(s) chosen by the operator`,
         filters: Object.fromEntries(Object.entries({ taskId: a.taskId, agent, execution, verification, decision: acceptance }).filter(([, v]) => v !== undefined)),
         matched: matched.length,
-        tasks: matched.slice(0, limit).map((t) => ({ ...t, passportFilePresent: passportFilePresent(t.groupId) })),
+        // The folder label itself is not shown; only how it relates to the server's workspace. This is a search aid, not a permission.
+        tasks: matched.slice(0, limit).map(({ workspace, ...t }) => ({ ...t, workspace: workspaceRelation(workspace, current), passportFilePresent: passportFilePresent(t.groupId) })),
       };
     },
   },
