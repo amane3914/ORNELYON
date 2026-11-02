@@ -482,3 +482,29 @@ test('the CLI refuses unsafe scope combinations and prints a safe default regist
   assert.match(named.stdout, new RegExp(`--allow-task ${env.groupId}`));
   assert.match(named.stdout, /Content mode is ON/);
 });
+
+// ---------- v0.5.0 Phase 0: native GUI integration helpers ----------
+
+test('print-config includes a Codex config.toml block with TOML literal strings, and the Claude desktop note', async () => {
+  const env = await setup();
+  const help = registrationHelp('C:\Program Files\ORNELYON x\dist\interface\cli.js', { exposeContent: false, tasks: [env.groupId], recent: null });
+  assert.match(help, /\[mcp_servers\.ornelyon\]/);
+  assert.ok(help.includes(`command = '${process.execPath}'`), 'the node path is a literal string, written exactly');
+  assert.ok(help.includes(`args = ['C:\Program Files\ORNELYON x\dist\interface\cli.js', 'mcp', '--allow-task', '${env.groupId}']`));
+  assert.ok(help.includes(`[mcp_servers.ornelyon.env]\nORNELYON_HOME = '${env.home}'`));
+  assert.match(help, /Code tab/);
+  assert.match(help, /--self-test/);
+  assert.ok(!/--all-tasks|--expose-content/.test(help), 'a named, content-free scope stays narrow');
+});
+
+test('--self-test passes against this build, reports every step, and writes nothing to the data folder', async () => {
+  const env = await setup();
+  const before = snapshot(env.home);
+  const r = spawnSync(process.execPath, [join(packageRoot(), 'dist', 'interface', 'cli.js'), 'mcp', '--self-test', '--allow-task', env.groupId], { env: { ...process.env, ORNELYON_HOME: env.home }, encoding: 'utf8', timeout: 90000 });
+  assert.equal(r.status, 0, r.stdout + r.stderr);
+  assert.ok(!/FAIL/.test(r.stdout));
+  assert.match(r.stdout, /all marked read-only/);
+  assert.match(r.stdout, /ornelyon_run_task is refused/);
+  assert.match(r.stdout, /SELF-TEST PASS .*NOT_TESTED/);
+  assert.equal(snapshot(env.home), before);
+});

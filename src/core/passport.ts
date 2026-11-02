@@ -443,7 +443,8 @@ export const EMAIL_MARK = '[email-removed]';
 export function cleanForHandoff(text: string, root: string, stats: CleanStats): string {
   const rootNorm = root.replace(/\\/g, '/').replace(/\/+$/, '');
   const winPath = /[A-Za-z]:[\\/][^\s`'"<>|*?()[\]{}]*/g;
-  const posixPath = /(?<![\w.:/])\/(?:Users|home|mnt|var|tmp|private|etc|opt|c|d)\/[^\s`'"<>|*?()[\]{}]*/g;
+  // POSIX directory names in reports may have different case; normalize both the match and root before comparison.
+  const posixPath = /(?<![\w.:/])\/(?:Users|home|mnt|var|tmp|private|etc|opt|c|d)\/[^\s`'"<>|*?()[\]{}]*/gi;
   const swap = (match: string): string => {
     const trail = /[.,;:!]+$/.exec(match)?.[0] ?? '';
     const raw = trail ? match.slice(0, -trail.length) : match;
