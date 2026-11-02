@@ -1,6 +1,7 @@
 import { readRecords } from '../core/history.js';
 import { isVerified } from '../core/evidence.js';
-import { evidenceFor } from './service.js';
+import type { RunRecord } from '../core/history.js';
+import { initialEvidence, latestEvidence } from '../core/evidence.js';
 
 /**
  * Claude Code `Stop` hook helper (v0.7.0 design; off unless the user adds the printed snippet to a settings file).
@@ -10,11 +11,11 @@ import { evidenceFor } from './service.js';
  * starts no agent, and does not change the Evidence Gate. Its output is `systemMessage` only (a message for the
  * user, not instructions for the model), and every failure ends in silence with exit code 0.
  *
- * It keeps no state: the same input gives the same output, and firing again costs one bounded read of the history.
+ * It keeps no state: the same input gives the same output, and firing again costs one read of the history file.
  */
 const GROUP_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 export const HOOK_MAX_TASKS = 10;
-export const HOOK_MAX_INPUT = 64 * 1024;
+export const HOOK_MAX_INPUT = 1024 * 1024;
 
 export interface HookLine {
   task: string;
@@ -23,15 +24,19 @@ export interface HookLine {
 }
 
 /** The state of one listed task, in words that never say "passed" unless ORNELYON's own checks did. */
-export function hookLine(groupId: string, historyComplete: boolean): HookLine {
+export function hookLine(groupId: string, records: RunRecord[], historyComplete: boolean): HookLine {
   const short = groupId.slice(0, 8);
-  const view = evidenceFor(groupId);
+  const summary = [...records].reverse().find((r) => r.groupId === groupId && r.role === 'summary');
+  const recorded = summary ? latestEvidence(records, groupId) : null;
+  const view = summary ? { evidence: recorded ?? initialEvidence({ status: summary.result.status, sandbox: 'workspace-write', verificationRequired: false, checks: [], changedFiles: [] }), recorded: recorded !== null } : null;
   if (!view) {
     return { task: short, text: `${short}: UNKNOWN (no final record in history; it may still be running)`, attention: true };
   }
   const e = view.evidence;
   const verified = view.recorded && historyComplete && isVerified(e);
-  const states = `Execution ${e.execution}, Verification ${view.recorded ? e.verification : 'UNKNOWN'}, Acceptance ${e.acceptance}`;
+  // Values come from a file on disk; anything that is not a plain state word is shown as UNKNOWN, never copied.
+  const word = (v: unknown): string => (typeof v === 'string' && /^[A-Z_]{1,20}$/.test(v) ? v : 'UNKNOWN');
+  const states = `Execution ${word(e.execution)}, Verification ${view.recorded ? word(e.verification) : 'UNKNOWN'}, Acceptance ${word(e.acceptance)}`;
   if (verified) {
     return { task: short, text: `${short}: ${states}; verified by ORNELYON's own checks`, attention: false };
   }
@@ -67,8 +72,8 @@ export function stopHookOutput(stdin: string, taskIds: string[]): string | null 
   }
   let lines: HookLine[];
   try {
-    const complete = readRecords().skippedLines === 0;
-    lines = ids.map((id) => hookLine(id, complete));
+    const read = readRecords();
+    lines = ids.map((id) => hookLine(id, read.records, read.skippedLines === 0));
   } catch {
     return null;
   }

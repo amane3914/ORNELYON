@@ -92,7 +92,8 @@ test('skills: only existing read-only MCP tools and arguments are named, and the
     }
     assert.ok(named(s.skillMd).length > 0);
     assert.match(s.skillMd, /NOT_AVAILABLE/, 'says what to do when the server is not connected');
-    assert.match(s.skillMd, /not instructions|not an instruction|data/i, 'returned text is data');
+    assert.match(s.skillMd, /(is data|are data|not instructions|not an instruction)/i, 'returned text is data');
+    assert.match(s.skillMd, /do not run commands/i, 'no workaround by commands or by reading the data folder');
     assert.ok(!/ornelyon_(run|start|accept|reject|dispatch_run)/.test(s.skillMd), 'no action tool');
     assert.ok(!/\b(rm|curl|wget|powershell|bash|sudo)\b/i.test(s.skillMd.replace(/Do not run commands[^.]*\./g, '')), 'no shell commands in the text');
   }
@@ -108,6 +109,8 @@ test('skills: only existing read-only MCP tools and arguments are named, and the
   const history = bundledSkills().find((s) => s.name === 'ornelyon-task-history')?.skillMd ?? '';
   assert.match(history, /is not "interrupted"/);
   assert.match(history, /Never say which/, 'does not reveal whether an out-of-scope task exists');
+  const resume = bundledSkills().find((s) => s.name === 'ornelyon-resume-preview')?.skillMd ?? '';
+  assert.match(resume, /do not say whether the task exists/i);
 });
 
 // ---------- install / remove ----------
@@ -145,6 +148,42 @@ test('install: a skill of the same name that the user wrote, or edited, is never
   assert.deepEqual(readdirSync(target), ['ornelyon-evidence-check'], 'the other two were installed and then removed; the foreign one stays');
 });
 
+test('install/remove: extra files next to an installed skill, and a forged or mismatched marker, stop any deletion or replacement', () => {
+  const home = freshHome();
+  const target = join(home, 'skills');
+  applyInstall(target);
+  const withNotes = join(target, 'ornelyon-evidence-check');
+  writeFileSync(join(withNotes, 'notes.md'), 'my notes');
+  mkdirSync(join(withNotes, 'scripts'));
+  assert.equal(planRemove(target).find((p) => p.name === 'ornelyon-evidence-check')?.action, 'KEEP_MODIFIED');
+  assert.equal(planInstall(target).find((p) => p.name === 'ornelyon-evidence-check')?.action, 'KEEP_MODIFIED');
+  applyRemove(target);
+  assert.equal(readFileSync(join(withNotes, 'notes.md'), 'utf8'), 'my notes');
+  assert.ok(existsSync(join(withNotes, 'scripts')));
+  // A marker that names another skill does not make the folder ours.
+  const other = join(target, 'ornelyon-task-history');
+  mkdirSync(other, { recursive: true });
+  writeFileSync(join(other, 'SKILL.md'), 'x');
+  writeFileSync(join(other, '.ornelyon-skill.json'), JSON.stringify({ skill: 'some-other-name', sha256: createHash('sha256').update('x').digest('hex') }));
+  assert.equal(planRemove(target).find((p) => p.name === 'ornelyon-task-history')?.action, 'SKIP_FOREIGN');
+  assert.equal(planInstall(target).find((p) => p.name === 'ornelyon-task-history')?.action, 'SKIP_FOREIGN');
+});
+
+test('install: an update replaces an unchanged older copy and leaves no temporary or backup folder', () => {
+  const home = freshHome();
+  const target = join(home, 'skills');
+  const [skill] = bundledSkills();
+  applyInstall(target);
+  const dir = join(target, skill.name);
+  const old = 'OLD VERSION\n';
+  writeFileSync(join(dir, 'SKILL.md'), old);
+  writeFileSync(join(dir, '.ornelyon-skill.json'), JSON.stringify({ skill: skill.name, sha256: createHash('sha256').update(old).digest('hex') }));
+  assert.equal(planInstall(target).find((p) => p.name === skill.name)?.action, 'UPDATE');
+  applyInstall(target);
+  assert.equal(readFileSync(join(dir, 'SKILL.md'), 'utf8'), skill.skillMd);
+  assert.deepEqual(readdirSync(target).sort(), EXPECTED);
+});
+
 test('remove: only unmodified installed copies go; an edited copy stays', () => {
   const home = freshHome();
   const target = join(home, 'skills');
@@ -179,6 +218,9 @@ test('cli: skills install is a dry run by default, needs a named target, and hoo
   assert.match(printed.stdout, /nothing was changed/);
   assert.equal(tree(home), before);
   assert.equal(spawnSync(process.execPath, [CLI, 'hooks', 'print', '--task', 'not-an-id'], { env, encoding: 'utf8' }).status, 2);
+  const noValue = spawnSync(process.execPath, [CLI, 'skills', 'install', '--target', '--apply'], { env, cwd: home, encoding: 'utf8' });
+  assert.equal(noValue.status, 2);
+  assert.equal(existsSync(join(home, '--apply')), false, 'a flag is never taken as the folder');
 });
 
 // ---------- the Stop hook ----------
@@ -235,7 +277,7 @@ test('hook: silent when everything listed is verified, and a verified task with 
 test('hook: bad input, other events, no tasks, oversize input and an active stop hook all stay silent', () => {
   freshHome();
   const id = write();
-  for (const input of ['', 'garbage', '[]', 'null', '5', JSON.stringify({ hook_event_name: 'PostToolUse' }), JSON.stringify({ hook_event_name: 'Stop', stop_hook_active: true }), `{"hook_event_name":"Stop","x":"${'a'.repeat(70000)}"}`]) {
+  for (const input of ['', 'garbage', '[]', 'null', '5', JSON.stringify({ hook_event_name: 'PostToolUse' }), JSON.stringify({ hook_event_name: 'Stop', stop_hook_active: true }), `{"hook_event_name":"Stop","x":"${'a'.repeat(1100000)}"}`]) {
     assert.equal(stopHookOutput(input, [id]), null, input.slice(0, 40));
   }
   assert.equal(stopHookOutput(STOP, []), null);
@@ -270,9 +312,14 @@ test('hook: the command line entry never fails or hangs on bad input, and prints
   }
   assert.equal(run(STOP, []).stdout, '', 'no task listed: silence');
   assert.equal(spawnSync(process.execPath, [CLI, 'hook', 'other'], { env, input: STOP, encoding: 'utf8' }).status, 0);
-  // A broken data folder is silence, not a crash.
-  const broken = spawnSync(process.execPath, [CLI, 'hook', 'stop', '--task', id], { env: { ...process.env, ORNELYON_HOME: join(home, 'missing', 'x') }, input: STOP, encoding: 'utf8', timeout: 20000 });
-  assert.equal(broken.status, 0);
+  // A data folder with no history is reported as UNKNOWN, never as verified, and never as a crash.
+  const empty = spawnSync(process.execPath, [CLI, 'hook', 'stop', '--task', id], { env: { ...process.env, ORNELYON_HOME: join(home, 'missing', 'x') }, input: STOP, encoding: 'utf8', timeout: 20000 });
+  assert.equal(empty.status, 0);
+  assert.match(empty.stdout, /UNKNOWN/);
+  assert.ok(!/verified by ORNELYON/.test(empty.stdout));
+  // Input that never ends: the hook gives up by itself, quietly, with exit code 0.
+  const hung = spawnSync(process.execPath, [CLI, 'hook', 'stop', '--task', id], { env, input: '{"hook_event_name":"Stop"', encoding: 'utf8', timeout: 20000 });
+  assert.equal(hung.status, 0);
 });
 
 test('hook: the snippet is plain data, calls only this build, and lists the tasks', () => {

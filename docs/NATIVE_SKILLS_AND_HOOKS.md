@@ -18,7 +18,7 @@ The skills need the MCP server registered (`ornelyon mcp --print-config`, see NA
 
 ## Install, disable, remove
 
-Nothing is installed by default. The helper copies the skill folders into a folder you name, shows a dry run first, and never touches a skill folder it did not write.
+Nothing is installed by default. The helper copies the skill folders into a folder you name, shows a dry run first, and only replaces or deletes a folder that holds exactly its own `SKILL.md` and marker file, unchanged.
 
 ```bash
 ornelyon skills list
@@ -28,25 +28,25 @@ ornelyon skills remove  --client claude --apply    # removes only unmodified cop
 ```
 
 - `--client claude` means `~/.claude/skills`, the personal-skills folder the Claude Code documentation names. For Codex there is no `--client codex` on purpose: the OpenAI pages checked describe plugin packaging and do not state a user skills folder. Use `--target <folder>` with the folder your Codex version documents, or copy the three folders by hand.
-- A folder with the same name that ORNELYON did not install is `SKIP_FOREIGN`. A copy you edited is `KEEP_MODIFIED`. Both are left alone.
-- Each skill is written to a temporary sibling folder and renamed, so a failure leaves nothing half written. Re-running is harmless.
+- A folder with the same name that ORNELYON did not install is `SKIP_FOREIGN`. A copy you edited, or that has any extra file, is `KEEP_MODIFIED`. Both are left alone, so files you keep next to a skill are never deleted. (A folder someone built with a copied marker and identical contents would count as ours; that needs write access to your skills folder.)
+- Each skill is written to a fresh temporary sibling folder and renamed; an update keeps the old copy until the new one is in place and restores it on failure. If a later skill fails, the earlier ones stay installed and the command says so. Re-running is harmless.
 - To disable without deleting: in Claude Code the skills already need an explicit `/ornelyon-evidence-check` style call. To remove: `skills remove`, or delete the folder.
-- `.claude`, `.codex`, MCP registrations and any settings file are never edited by ORNELYON.
+- No settings file (`settings.json`, `config.toml`, `.claude.json`) and no MCP registration is edited by ORNELYON. With `--apply` it only adds `ornelyon-*` folders under the folder you named (for `--client claude`, inside `~/.claude/skills`).
 
 ## Hooks: decision
 
 **Adopted (design, helper and tests): one opt-in Claude Code `Stop` hook. Not enabled by anything ORNELYON does. Codex hooks: held.**
 
-`ornelyon hooks print --task <id> [--task <id> …]` prints a settings entry. You add it to a settings file yourself; deleting it disables it. Not verified against a live Claude Code session.
+`ornelyon hooks print --task <id> [--task <id> …]` prints a settings entry. You add it to a settings file yourself; deleting it disables it. Not verified against a live Claude Code session. The entry uses a `command` plus an `args` array (the exec form that the hooks page summary mentions). If your Claude Code version does not accept `args`, a bare `node` would read the hook input as a script and fail on every Stop event (a non-blocking error); check the entry in your version first, or use a single quoted command string instead.
 
 What the helper (`ornelyon hook stop`) does, and does not:
 
 | Property | Behaviour |
 | --- | --- |
-| Input | One JSON object on stdin, at most 64 KiB. Anything unreadable, another event, or no listed task: no output, exit 0. |
+| Input | One JSON object on stdin, at most 1 MiB. Nothing on a terminal; if the input does not finish within 5 s it gives up quietly. Anything unreadable, another event, or no listed task: no output, exit 0. |
 | Output | Only `{"systemMessage": "…"}` (a notice for you). No `decision`, `continue`, `additionalContext` or permission fields, so it cannot block, steer the model, or ask it to continue. |
 | Loops | `stop_hook_active: true` gives silence. It never asks Claude to continue, so it cannot start a loop. No state, no writes. |
-| Cost | One bounded read of the history per firing. No agent, no network, no process started (a test checks the compiled code). At most 10 tasks. |
+| Cost | One read of the history file per firing (it grows with the history; the snippet sets a 10 s timeout). No agent, no network, no process started: the compiled `hook.js` and `skills.js` import no process or network module (tested), and the history code they reuse is read-only. At most 10 tasks. |
 | Failure | Every error is silence with exit code 0. The snippet sets `timeout: 10`. |
 | Content | Short ids, states and fixed words only. No prompt, output, check name or path from a record. |
 | Verdicts | Never changes the Evidence Gate. "verified" appears only when ORNELYON's own checks say so; no record or unreadable history reads as NOT verified / UNKNOWN. |
@@ -60,7 +60,7 @@ Held: `PostToolUse`/`PreToolUse` hooks (they act mid-task and could be steered b
 Claude Code (`code.claude.com/docs/en/skills`, `…/hooks`; both pages were long and partly read through summaries, so those parts are lower confidence):
 - Skills live in `~/.claude/skills/<name>/SKILL.md` (personal), `.claude/skills/<name>/SKILL.md` (project), or `<plugin>/skills/…`. Frontmatter includes `name`, `description`, `disable-model-invocation`, `user-invocable`, `allowed-tools`. Enterprise overrides personal, personal overrides project; plugin skills are namespaced.
 - MCP tool names in `allowed-tools` are **not stated** on the skills page, so the skills pre-approve nothing.
-- Hooks are set in settings files (user, project, local, managed, plugin). `Stop` input has `stop_hook_active`. Exit 0 with a JSON object is parsed; exit 2 blocks. Defaults: 600 s timeout for command hooks. Claude Code ends a chain after eight consecutive stop-hook continuations.
+- Hooks are set in settings files (user, project, local, managed, plugin). `Stop` input has `stop_hook_active`. Exit 0 with a JSON object is parsed; exit 2 blocks. Defaults: 600 s timeout for command hooks, and a limit of eight consecutive stop-hook continuations (both taken from the page summary; not independently confirmed).
 
 OpenAI (`developers.openai.com/plugins/...`):
 - A skill is a folder with `SKILL.md` (`name`, `description`); optional `scripts/`, `references/`, `assets/`. Plugins package skills under `skills/` and MCP servers in `.mcp.json`; install is via `codex plugin marketplace add …` or manual copy. Standalone skill folders, an explicit-invocation-only setting, name precedence and Codex client versions are **not stated** on those pages. `$skill-name` is how the page invokes the skill creator.

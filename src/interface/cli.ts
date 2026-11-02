@@ -577,6 +577,10 @@ function cmdSkills(args: string[]): number {
   }
   const client = flag(args, '--client');
   const explicit = flag(args, '--target');
+  if ((explicit !== undefined && explicit.startsWith('--')) || (client !== undefined && client.startsWith('--'))) {
+    console.error('--target and --client need a value.');
+    return 2;
+  }
   const target = explicit !== undefined ? explicit : client !== undefined ? defaultTarget(client) : null;
   if (target === null) {
     console.error('Name where to put the skills: --client claude (the folder Claude Code documents) or --target <folder>. For Codex give --target; its skills folder is not confirmed by the official pages this build was checked against.');
@@ -589,7 +593,13 @@ function cmdSkills(args: string[]): number {
     console.error((e as Error).message);
     return 2;
   }
-  const plan = sub === 'install' ? (apply ? applyInstall(folder, skills) : planInstall(folder, skills)) : apply ? applyRemove(folder, skills) : planRemove(folder, skills);
+  let plan;
+  try {
+    plan = sub === 'install' ? (apply ? applyInstall(folder, skills) : planInstall(folder, skills)) : apply ? applyRemove(folder, skills) : planRemove(folder, skills);
+  } catch (e) {
+    console.error(`Stopped: ${(e as Error).message}. Folders already finished stay as they are; the one that failed was left as it was. Run the dry run again to see the state.`);
+    return 1;
+  }
   console.log(`${apply ? 'Done' : 'Dry run (nothing written)'} - ${sub} in ${folder}`);
   for (const p of plan) {
     console.log(`  ${p.action.padEnd(14)} ${p.name}: ${p.detail}`);
@@ -617,6 +627,12 @@ async function cmdHook(args: string[]): Promise<number> {
   if (args[0] !== 'stop') {
     return 0;
   }
+  if (process.stdin.isTTY) {
+    return 0;
+  }
+  // A hook must never hang: give up quietly if the input does not arrive and close.
+  const giveUp = setTimeout(() => process.exit(0), 5000);
+  giveUp.unref();
   try {
     const chunks: Buffer[] = [];
     let size = 0;

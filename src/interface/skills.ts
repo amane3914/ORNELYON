@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { packageRoot } from '../core/paths.js';
@@ -61,13 +61,21 @@ function readMarker(dir: string): Marker | null {
   }
 }
 
-/** Is the installed folder exactly what ORNELYON wrote (marker present, SKILL.md unchanged)? */
-function ownedAndUnchanged(dir: string): boolean | null {
+/**
+ * Is the installed folder exactly what ORNELYON wrote? Null: not ours (no readable marker, or a marker for another name).
+ * False: ours once, but changed (SKILL.md edited, or any file added). Only a folder holding exactly SKILL.md and the
+ * marker, with SKILL.md matching the marker, may be replaced or deleted, so user files next to it are never lost.
+ */
+function ownedAndUnchanged(dir: string, name: string): boolean | null {
   const marker = readMarker(dir);
-  if (!marker) {
+  if (!marker || marker.skill !== name) {
     return null;
   }
   try {
+    const entries = readdirSync(dir).sort();
+    if (entries.length !== 2 || entries[0] !== MARKER || entries[1] !== 'SKILL.md') {
+      return false;
+    }
     return createHash('sha256').update(readFileSync(join(dir, 'SKILL.md'), 'utf8')).digest('hex') === marker.sha256;
   } catch {
     return false;
@@ -80,12 +88,12 @@ export function planInstall(target: string, skills = bundledSkills()): SkillPlan
     if (!existsSync(dest)) {
       return { name: s.name, action: 'INSTALL', detail: `create ${dest}` };
     }
-    const own = ownedAndUnchanged(dest);
+    const own = ownedAndUnchanged(dest, s.name);
     if (own === null) {
       return { name: s.name, action: 'SKIP_FOREIGN', detail: 'a folder with this name exists and was not installed by ORNELYON; left untouched' };
     }
     if (!own) {
-      return { name: s.name, action: 'KEEP_MODIFIED', detail: 'installed earlier but edited since; left untouched' };
+      return { name: s.name, action: 'KEEP_MODIFIED', detail: 'installed earlier but edited or extended since; left untouched' };
     }
     const marker = readMarker(dest);
     return marker?.sha256 === s.sha256 ? { name: s.name, action: 'UP_TO_DATE', detail: 'already installed' } : { name: s.name, action: 'UPDATE', detail: 'installed earlier, unchanged since; replace with the bundled version' };
@@ -98,29 +106,37 @@ export function planRemove(target: string, skills = bundledSkills()): SkillPlanI
     if (!existsSync(dest)) {
       return { name: s.name, action: 'NOT_INSTALLED', detail: 'nothing to remove' };
     }
-    const own = ownedAndUnchanged(dest);
+    const own = ownedAndUnchanged(dest, s.name);
     if (own === null) {
       return { name: s.name, action: 'SKIP_FOREIGN', detail: 'not installed by ORNELYON; left untouched' };
     }
-    return own ? { name: s.name, action: 'REMOVE', detail: `delete ${dest}` } : { name: s.name, action: 'KEEP_MODIFIED', detail: 'edited since install; left untouched (remove it yourself if you want it gone)' };
+    return own ? { name: s.name, action: 'REMOVE', detail: `delete ${dest}` } : { name: s.name, action: 'KEEP_MODIFIED', detail: 'edited or extended since install; left untouched (remove it yourself if you want it gone)' };
   });
 }
 
 /** Write one skill atomically: a temporary sibling folder first, then a rename. A failure leaves nothing half written. */
 function writeSkill(target: string, s: BundledSkill, replace: boolean): void {
   const dest = join(target, s.name);
-  const tmp = join(target, `.${s.name}.ornelyon-tmp-${process.pid}`);
-  rmSync(tmp, { recursive: true, force: true });
-  mkdirSync(tmp, { recursive: true });
+  mkdirSync(target, { recursive: true });
+  // A fresh, uniquely named folder: nothing planted beforehand can be written through.
+  const tmp = mkdtempSync(join(target, `.${s.name}.tmp-`));
+  const backup = `${tmp}.old`;
+  let moved = false;
   try {
     writeFileSync(join(tmp, 'SKILL.md'), s.skillMd, 'utf8');
     writeFileSync(join(tmp, MARKER), `${JSON.stringify({ skill: s.name, sha256: s.sha256 }, null, 2)}\n`, 'utf8');
     if (replace) {
-      rmSync(dest, { recursive: true, force: true });
+      // Keep the old copy until the new one is in place, so a failure restores it.
+      renameSync(dest, backup);
+      moved = true;
     }
     renameSync(tmp, dest);
+    rmSync(backup, { recursive: true, force: true });
   } catch (e) {
     rmSync(tmp, { recursive: true, force: true });
+    if (moved && !existsSync(dest)) {
+      renameSync(backup, dest);
+    }
     throw e;
   }
 }
