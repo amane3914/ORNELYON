@@ -21,12 +21,21 @@ function run(command, args, cwd = root) {
   }
 }
 
-run(process.execPath, [join(root, 'node_modules', 'typescript', 'bin', 'tsc'), '-p', join(root, 'tsconfig.json')]);
+// Compile into a fresh folder of its own, never into `dist`. A leftover file in `dist` (an old build, a renamed module)
+// therefore cannot reach the package: only what this compile writes is copied. A failed compile stops here, before
+// any existing package is touched.
+const build = join(root, 'dist-package', `.build-${name}`);
+rmSync(build, { recursive: true, force: true });
+run(process.execPath, [join(root, 'node_modules', 'typescript', 'bin', 'tsc'), '-p', join(root, 'tsconfig.json'), '--outDir', build]);
 
-rmSync(join(root, 'dist-package'), { recursive: true, force: true });
+// Only this version's staging folder and zip are replaced. Other versions' packages in dist-package are never touched,
+// so an already built release stays byte-for-byte as it was.
+rmSync(stage, { recursive: true, force: true });
+rmSync(zipPath, { force: true });
 mkdirSync(stage, { recursive: true });
 
-cpSync(join(root, 'dist'), join(stage, 'dist'), { recursive: true });
+cpSync(build, join(stage, 'dist'), { recursive: true });
+rmSync(build, { recursive: true, force: true });
 // Compiled tests are for developers; end users do not need them.
 rmSync(join(stage, 'dist', 'test'), { recursive: true, force: true });
 cpSync(join(root, 'web'), join(stage, 'web'), { recursive: true });

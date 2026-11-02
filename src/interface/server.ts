@@ -523,9 +523,51 @@ async function handleApi(req: IncomingMessage, res: ServerResponse, path: string
   throw new HttpError(404, 'Not found.');
 }
 
+const TOKEN_PLACEHOLDER = '__CHIMERA_TOKEN__';
+const VERSION_PLACEHOLDER = '__ORNELYON_VERSION__';
+const VERSION_PATTERN = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/;
+
+/** The version of this install: package.json is the only place it is written down. */
+export function readPackageVersion(root: string = packageRoot()): string {
+  const version = (JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')) as { version?: unknown }).version;
+  if (typeof version !== 'string' || !VERSION_PATTERN.test(version)) {
+    throw new Error('package.json has no valid version; the page cannot show one.');
+  }
+  return version;
+}
+
+/** The token as a JavaScript string literal that is also safe inside an inline <script>: no raw "<", ">", "&" or line separators. */
+function tokenLiteral(token: string): string {
+  return JSON.stringify(token).replace(/[<>&\u2028\u2029]/g, (c) => '\\u' + c.charCodeAt(0).toString(16).padStart(4, '0'));
+}
+
+/**
+ * Fill the two placeholders of the page. Each must occur exactly once in the template, so a template that no
+ * longer matches fails at start-up instead of showing a raw placeholder.
+ * The token replaces the quoted placeholder `'__CHIMERA_TOKEN__'` with a complete JSON string literal, so any
+ * token that was accepted before (dots, "+", "=", quotes, backslashes, "</script>") stays valid and cannot end
+ * the string or the script. The version is limited to `x.y.z[-suffix]`, which needs no escaping in HTML text.
+ * Replacer functions keep "$&"-style patterns from being expanded.
+ */
+export function renderPage(template: string, token: string, version: string): string {
+  if (!VERSION_PATTERN.test(version)) {
+    throw new Error('Invalid version string.');
+  }
+  const quotedToken = `'${TOKEN_PLACEHOLDER}'`;
+  if (template.split(quotedToken).length !== 2 || template.split(TOKEN_PLACEHOLDER).length !== 2) {
+    throw new Error(`web/index.html must contain ${quotedToken} exactly once.`);
+  }
+  if (template.split(VERSION_PLACEHOLDER).length !== 2) {
+    throw new Error(`web/index.html must contain ${VERSION_PLACEHOLDER} exactly once.`);
+  }
+  // One pass over the template, so a substituted value is never searched for the other placeholder.
+  const literal = tokenLiteral(token);
+  return template.replace(new RegExp(`${quotedToken}|${VERSION_PLACEHOLDER}`, 'g'), (found) => (found === quotedToken ? literal : version));
+}
+
 export function startServer(port: number, existingToken?: string): Promise<RunningServer> {
   const token = existingToken ?? randomBytes(24).toString('base64url');
-  const html = readFileSync(join(packageRoot(), 'web', 'index.html'), 'utf8').replace('__CHIMERA_TOKEN__', token);
+  const html = renderPage(readFileSync(join(packageRoot(), 'web', 'index.html'), 'utf8'), token, readPackageVersion());
   const allowedHosts = new Set([`127.0.0.1:${port}`, `localhost:${port}`]);
 
   const server: Server = createServer((req, res) => {
@@ -574,7 +616,7 @@ export function startServer(port: number, existingToken?: string): Promise<Runni
     server.listen(port, '127.0.0.1', () => {
       server.off('error', reject);
       resolve({
-        url: `http://127.0.0.1:${port}/?token=${token}`,
+        url: `http://127.0.0.1:${port}/?token=${encodeURIComponent(token)}`,
         token,
         close: () => new Promise<void>((done) => server.close(() => done())),
       });

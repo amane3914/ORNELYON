@@ -2,7 +2,7 @@
 
 ## Supported versions
 
-ORNELYON v0.4.1 is a **Public Preview**. Only the latest released version receives security fixes. Older versions (v0.2.1, v0.3.0, v0.3.1) are not supported.
+ORNELYON v0.4.2 is a **Public Preview**. Only the latest released version receives security fixes. Older versions (v0.2.1, v0.3.0, v0.3.1, v0.4.1) are not supported.
 
 ## Reporting a vulnerability
 

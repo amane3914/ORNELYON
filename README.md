@@ -1,8 +1,8 @@
-# ORNELYON v0.4.1
+# ORNELYON v0.4.2
 
 A small, local harness that lets you run tasks through **OpenAI Codex**, **Claude Code** or a **local OpenAI-compatible LLM** from one setup screen and one command. It is independent of, and not affiliated with, endorsed by or sponsored by, OpenAI, Google, Microsoft or Anthropic. Read [Accounts, billing and provider terms](#accounts-billing-and-provider-terms) before you use a Codex or Claude Code sign-in.
 
-> Status: **Public Preview** (v0.4.1). It is not a stable release, and nothing in it is guaranteed beyond what is described below. 281 offline tests pass (fake adapters, a localhost fake model, hand-built history and the official MCP SDK client, no paid calls). Real Claude Code runs so far: one read-only smoke task and read-only handoffs (v0.3.0, v0.3.1). **v0.4.0 and v0.4.1 added no real-agent run.** The Efficiency Benchmark has only been checked on hand-built, synthetic and fake-adapter history, so it says nothing yet about real token or cost savings. Real file edits, real failures, any real Codex task, other operating systems and a live connection from Claude Code or Codex to the MCP server were **not** run (by policy, no paid or metered agent call is used to test v0.4.1; these paths are NOT_TESTED, not verified). See [IMPLEMENTATION_REPORT.md](IMPLEMENTATION_REPORT.md) sections 13 to 17.
+> Status: **Public Preview** (v0.4.2). It is not a stable release, and nothing in it is guaranteed beyond what is described below. 286 offline tests pass (fake adapters, a localhost fake model, hand-built history and the official MCP SDK client, no paid calls). Real Claude Code runs so far: read-only tasks and read-only Claude Code to Claude Code handoffs (v0.3.0, v0.3.1, and one of each again on the v0.4.2 build). **v0.4.0 and v0.4.1 added no real-agent run. v0.4.2 ran two real Claude Code calls (one read-only task and one Claude Code to Claude Code handoff, 2026-11-02) and no real Codex call.** The Efficiency Benchmark has only been checked on hand-built, synthetic and fake-adapter history, so it says nothing yet about real token or cost savings. Real file edits, real failures, any real Codex task (including any handoff with Codex), other operating systems and a live connection from Claude Code or Codex to the MCP server were **not** run (by policy, no paid or metered agent call is used to test v0.4.1 or v0.4.2; these paths are NOT_TESTED, not verified). See [IMPLEMENTATION_REPORT.md](IMPLEMENTATION_REPORT.md) sections 13 to 17.
 
 ## What ORNELYON does
 
@@ -28,10 +28,11 @@ This is the first public preview. The table says what was checked and what was n
 
 | Item | Status |
 | --- | --- |
-| Windows 11 with Node.js 24: `npm test` (281 offline tests), build, packaging, launch | Verified by the maintainer on a local machine |
+| Windows 11 with Node.js 24: `npm test` (286 offline tests), build, packaging, launch | Verified by the maintainer on a local machine |
 | Node.js 20, macOS, Linux | **Not verified on real machines.** A CI workflow (`.github/workflows/ci.yml`) is in the repository; it has not been run yet |
-| Real Claude Code runs | Only one read-only smoke task and read-only handoffs, in v0.3.0 and v0.3.1. **No real-agent run for v0.4.0 or v0.4.1** |
-| Real Codex task | NOT_TESTED |
+| Real Claude Code runs | Read-only tasks and read-only Claude Code to Claude Code handoffs: v0.3.0 and v0.3.1, and one of each again on the v0.4.2 build (2026-11-02, Claude Code 2.1.311, subscription sign-in, 2 calls, both succeeded). **No real-agent run for v0.4.0 or v0.4.1** |
+| Real Codex task | NOT_TESTED (not run in v0.4.2 either; an earlier check on the maintainer's Windows machine was BLOCKED by the Codex sandbox setup) |
+| Handoff routes (nine, see [Handoff routes](#handoff-routes-implemented-is-not-verified)) | All nine are implemented as read-only handoffs. Only Claude Code to Claude Code was run with a real agent. The other eight are NOT_TESTED |
 | Real file edits and real failures | NOT_TESTED |
 | Live connection from Claude Code or Codex to the MCP server | NOT_TESTED |
 | Efficiency Benchmark: real token or cost savings | **Not shown.** Checked only on synthetic and hand-built history |
@@ -55,7 +56,7 @@ Read this before you run ORNELYON with a Codex or Claude Code sign-in. Last chec
 - **Terms to read.**
   - Anthropic: [Consumer Terms](https://www.anthropic.com/legal/consumer-terms), [Claude Code legal and compliance](https://code.claude.com/docs/en/legal-and-compliance), [Claude Code headless mode](https://code.claude.com/docs/en/headless).
   - OpenAI: [Terms of Use](https://openai.com/policies/terms-of-use/) (users outside the EEA, Switzerland and the UK), [Terms of Use for the EEA, Switzerland and the UK](https://openai.com/policies/eu-terms-of-use/), and the business terms linked from those pages for API and enterprise use; [Codex authentication](https://developers.openai.com/codex/auth).
-- **Gemini CLI: not implemented, not supported.** v0.4.1 has no Gemini CLI adapter and no code path that starts it, so it cannot be a routing or fallback target. Policy: ORNELYON will not support automated runs of Gemini CLI through a Google-account subscription or OAuth sign-in, and will not obtain, reuse or relay its OAuth credentials. Any future support depends on checking which authentication methods and conditions Google allows. The Gemini API and Vertex AI are separate routes: they are not implemented, and if they ever are, they will need explicit enabling and consent to billing.
+- **Gemini CLI: not implemented, not supported.** This version has no Gemini CLI adapter and no code path that starts it, so it cannot be a routing or fallback target. Policy: ORNELYON will not support automated runs of Gemini CLI through a Google-account subscription or OAuth sign-in, and will not obtain, reuse or relay its OAuth credentials. Any future support depends on checking which authentication methods and conditions Google allows. The Gemini API and Vertex AI are separate routes: they are not implemented, and if they ever are, they will need explicit enabling and consent to billing.
 
 ## Quick start
 
@@ -125,7 +126,7 @@ Hard limits for every task: maximum agent calls (`maxCalls`, default 3, includin
 
 - **Public Preview.** Interfaces, file formats and defaults may change before a stable release. Read [Public Preview: what has been verified](#public-preview-what-has-been-verified) first.
 - **Platforms:** only Windows with Node.js 24 has been run. macOS, Linux and Node.js 20 are not verified.
-- **Real agents:** v0.4.x has no real-agent run of its own. Real Codex work, real edits, real failures and MCP connections from a client are NOT_TESTED.
+- **Real agents:** v0.4.0 and v0.4.1 added no real-agent check. On the v0.4.2 build (2026-11-02, Claude Code subscription sign-in), one read-only Claude Code task and one read-only Claude Code to Claude Code handoff succeeded: the hash of the handoff context matched what was sent, and the receiving agent's answer agreed with the file's content. No record shows that the receiving agent opened the file, so that is not proven. A handoff that involves Codex, a handoff to or from a local LLM, real Codex work, real edits, real failures and MCP connections from a client are NOT_TESTED. Whether automated use under a subscription sign-in is allowed is NOT CONFIRMED.
 - **Gemini CLI** is not implemented and is not supported through a Google-account sign-in.
 - **Cost:** shown only when an agent reports it. Anything else is shown as "unknown". ORNELYON never estimates prices.
 - **Failure-loop guard** works between attempts (retries and fallbacks). It cannot intervene inside a running Codex or Claude session.
@@ -198,6 +199,41 @@ Commands must use an absolute path, run without a shell, and run only when a tas
 - A verification command is only as independent as its script. If the agent can edit the script (for example because it sits inside the allowed files), a PASS from that command is not independent evidence, and ORNELYON cannot tell whether the script was edited to pass. Keep verification scripts outside the agent's allowed files, and review any change to them yourself.
 - Session resume inside Codex or Claude Code is not used. Handoff starts a new run with a summary.
 - Automatic handoff is not implemented.
+
+## Handoff routes: implemented is not verified
+
+A handoff is started only by you (`ornelyon handoff`, or the GUI button with its confirmation). **Automatic handoff is not implemented.** The code accepts any of the three agents as the source and as the target, so all nine routes below exist. Four things are kept apart here, because they are not the same:
+
+1. **Implemented in the code:** all nine routes, read-only.
+2. **Offline tests (fake agents and a localhost fake model, no paid call):** representative routes only. The tests start handoffs whose target is Codex, Claude Code or the local model, and test each target's refusal conditions. They do **not** run each of the nine source and target pairs end to end.
+3. **Verified with a real agent:** Claude Code to Claude Code only (below).
+4. **Not verified:** the other eight routes, every handoff that involves Codex, every handoff between different agents, every handoff that involves a local LLM, and any handoff that edits files.
+
+| From | To | Kind | In the code | Verified with a real agent |
+| --- | --- | --- | --- | --- |
+| Claude Code | Claude Code | same agent | Read-only | **Succeeded**: v0.3.0 and v0.3.1, and again on the v0.4.2 build (2026-11-02) |
+| Claude Code | Codex | different agents | Read-only | NOT_TESTED |
+| Claude Code | Local LLM | different agents | Read-only | NOT_TESTED |
+| Codex | Claude Code | different agents | Read-only | NOT_TESTED |
+| Codex | Codex | same agent | Read-only | NOT_TESTED |
+| Codex | Local LLM | different agents | Read-only | NOT_TESTED |
+| Local LLM | Claude Code | different agents | Read-only | NOT_TESTED |
+| Local LLM | Codex | different agents | Read-only | NOT_TESTED |
+| Local LLM | Local LLM | same agent | Read-only | NOT_TESTED |
+
+- **What the real runs were.** Read-only tasks on a small scratch file in an isolated folder, with a Claude Code subscription sign-in and no API key (see [IMPLEMENTATION_REPORT.md](IMPLEMENTATION_REPORT.md) sections 13, 15 and 18). v0.3.0 and v0.3.1 ran them; v0.4.0 and v0.4.1 did not repeat them; v0.4.2 repeated one task and one handoff (2 calls, both succeeded) and **made no Codex call**. The next agent's answer is not taken as proof by itself: the evidence is ORNELYON's file hash check and the hash of the text that was sent.
+- **Handoffs are read-only.** The target always runs in read-only mode. A handoff that edits files is **not supported**. This is separate from ordinary tasks (`ornelyon run`), which can edit files in the workspace depending on the sandbox you choose.
+- **Same agent and different agents use the same checks.** The code does not treat them differently. Different agents have only been tried with fake agents.
+- **Checked before any agent starts** (any failure stops the handoff, and nothing is started):
+  - The target is **enabled** in the agent settings.
+  - The target is **available** when the check is made (a recent check may be reused). For Codex CLI and Claude Code CLI this means the program is found and its version command runs, and its login-status command reports a signed-in state. For the **local LLM** it means only that the configured URL answers `GET /models` with anything below HTTP 500. A local server that needs **no API key** is available; no key is required unless you configured `apiKeyEnv`. A server that does not answer, or answers `/models` with HTTP 500 or higher, makes it unavailable. A rejected API key (for example HTTP 401), an unknown model name, or an error on the later chat request is **not** found by this check.
+  - The **capability check**, only when the passport records a task kind (for example `--kind code`): the target must list that kind in its capabilities. A passport with **no recorded kind** (a task started without `--kind`, or a passport saved before v0.2.1) skips this check.
+  - The handoff count must be provable from history and stay within `multiAi.maxHandoffs`.
+  - The target's daily budget must not be spent (when you set one).
+  - Files must not have changed since the passport was saved, unless you add `--accept-current-state`.
+- **Only found out when the agent runs:** a sign-in that expires after the check, a rejected local API key, a missing model, a server error on the chat request, a timeout, the agent CLI's own errors, and sandbox problems (an earlier check of Codex on the maintainer's Windows machine was blocked this way). Such a run is recorded as failed, never as a successful handoff.
+- **Subscription sign-ins.** Whether ORNELYON may drive the Codex CLI or Claude Code CLI automatically under a subscription sign-in is **NOT CONFIRMED** (see [Accounts, billing and provider terms](#accounts-billing-and-provider-terms)). Having run it once does not change that.
+- **Gemini CLI is not implemented** and is not a source or target.
 
 ## What a handoff carries (v0.3.1)
 
@@ -322,7 +358,7 @@ ORNELYON is the name of this project; it is not the name of any provider's produ
 ```bash
 npm install
 npm test          # build + offline tests (no paid API calls)
-npm run package   # build dist-package/ORNELYON-0.4.1.zip
+npm run package   # build dist-package/ORNELYON-0.4.2.zip
 ```
 
 Runtime dependencies: none. Dev dependencies: TypeScript, Node type definitions and the official MCP TypeScript SDK (used by one test as a protocol client; the zip does not need it, so `npm ci --omit=dev` is enough for an install).
@@ -345,7 +381,7 @@ ORNELYON installs nothing globally and registers no services. Stop it with Ctrl+
 
 Open an issue at https://github.com/amane3914/ORNELYON/issues. Please include:
 
-- the version (`ORNELYON-0.4.1`), your operating system and your Node.js version (`node --version`);
+- the version (`ORNELYON-0.4.2`), your operating system and your Node.js version (`node --version`);
 - the command or GUI step you ran, and what you expected;
 - the output of `node dist/interface/cli.js doctor`, with any paths or account details you do not want public removed;
 - the task id and the relevant part of `verdict <task-id>`, if the problem is about a result.

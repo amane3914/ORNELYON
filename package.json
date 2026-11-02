@@ -1,6 +1,6 @@
 {
   "name": "ornelyon",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "description": "ORNELYON: a small local harness for running Codex, Claude Code and OpenAI-compatible local LLMs from one CLI and an optional local setup screen.",
   "license": "MIT",
   "private": true,

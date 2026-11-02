@@ -777,3 +777,111 @@ Limit that remains: a verification script the agent may edit proves nothing abou
 ### 17.10 Release-candidate status
 
 v0.4.1 is a **release candidate**, not a released version: no tag, no push, no publication. It is confirmed for what the VERIFIED rows cover. Everything marked NOT_TESTED, PARTIALLY_VERIFIED or BLOCKED above is a stated limit, not a result. A tag or release needs the owner's separate approval.
+
+## 18. ORNELYON v0.4.2 (GUI name and version, handoff documentation, package safety; branch feat/v0.4.2)
+
+A maintenance release. No feature was added. Base: `338b1c9` (branch `feat/v0.4.1`), the same source as the published v0.4.1 (`src`, `web`, `scripts`, `package.json`, `package-lock.json` compared file by file before the changes: identical). Not committed, not pushed, no tag. This section was corrected after the first independent audit (18.7); where it differs from the first version of this section, this version is the record.
+
+### 18.1 What changed
+
+| Area | Change |
+| --- | --- |
+| GUI header | `web/index.html`: the old-name sentence and the fixed "(v0.3.1)" are gone. The header shows `v<version>` from the placeholder `__ORNELYON_VERSION__` |
+| Version source | `src/interface/server.ts`: `readPackageVersion()` reads `package.json` (the only place the version is written) and requires `x.y.z` with an optional `-suffix`. `renderPage()` fills the version and the session token in one pass with replacer functions, so `$&` and similar patterns are never expanded. Each placeholder must occur exactly once in the template, otherwise start-up fails instead of serving a raw placeholder. No new API, no new dependency |
+| Session token | The quoted placeholder `'__CHIMERA_TOKEN__'` is replaced by a complete JSON string literal in which `<`, `>`, `&`, U+2028 and U+2029 are written as `\u` escapes. Every token that `startServer(port, existingToken)` accepted before is still accepted (the first version of this release wrongly limited it to letters, digits, `-` and `_`). The URL printed at start-up carries the token through `encodeURIComponent`. Authentication compares the original value |
+| Package script | `scripts/package.mjs`: (1) the whole `dist-package` folder is no longer deleted; only this version's staging folder and zip are replaced, other versions are left alone; (2) the package is compiled into its own fresh folder (`dist-package/.build-ORNELYON-<version>`, removed afterwards) and only that output is copied, never the contents of `dist`, so a stale file in `dist` cannot enter the zip; a failed compile stops before any existing package is touched |
+| Tests | `src/test/server.test.ts`: 5 tests added (version equals `package.json`, no placeholder left; header without the old name or the old version; 401 without a token; `renderPage` accepts and refuses the right inputs; eleven token shapes: all embedded as an exactly restoring script literal, the ASCII ones also authenticated over HTTP, see 18.4) |
+| Documents | README and README_ja: handoff routes (four kept-apart statements, nine routes, availability and capability conditions as the code applies them), version, test count and build lines. SECURITY.md (current version; v0.4.1 listed as older) and UNINSTALL.md (example folder). `package.json` and `package-lock.json` (two version fields): 0.4.2 |
+
+Unchanged on purpose: `CHIMERA_HOME`, `start-chimera.*`, the `chimera` bin alias, `x-chimera-token`, `__CHIMERA_TOKEN__`, internal type names, and the historical "saved before v0.3.1" texts. The handoff logic, agent routing, authentication of the agent CLIs and the MCP server were not changed.
+
+### 18.2 Handoff documentation: what is and is not claimed
+
+All nine source and target combinations of Claude Code, Codex and the local LLM go through the same checks (`handoffRefusal`) and always run read-only (`sandbox: 'read-only'`); same-agent and different-agent routes are not treated differently. Handoff is manual only; a handoff that edits files is not supported. The README keeps four statements apart: implemented in code (nine routes), offline tests (representative routes with fake agents: targets Codex, Claude Code and local; not every pair separately), real-agent results (Claude Code to Claude Code only) and not verified (the rest).
+
+Availability as the code applies it (`availabilityFrom`): Codex and Claude Code are available when the program was found, its version command ran, and its login-status command reported a signed-in state (an unreadable status counts as not signed in); the local LLM is available when the configured URL answers `GET /models` below HTTP 500 (no API key is needed unless `apiKeyEnv` is set; a rejected key or a missing model is found only when the run starts). The capability check runs only when the passport records a task kind; a passport without a kind (task without `--kind`, or saved before v0.2.1) skips it. The first version of this section and of the README said "installed or signed in at the last check" and "does not declare the task's capability" without these limits; that was too coarse.
+
+### 18.3 Real-agent check on the v0.4.2 build (2026-11-02)
+
+This is a check of ORNELYON's own handoff path with a real agent. It is separate from any code review.
+
+| Item | Result |
+| --- | --- |
+| Conditions | Claude Code 2.1.311 with its subscription sign-in (`claude.ai`); no API key variable set; isolated `ORNELYON_HOME` and a scratch workspace holding one 44-byte CRLF file; only Claude Code enabled; Smart Dispatch off; read-only (plan mode, 2 sub-agent tools denied); timeout 120 s; per-run budget 0.6; no retry; no sub-agent and no review by another agent was used |
+| Run A: `run --agent claude --kind text --verify-file sample.txt:<sha256>` | Execution SUCCESS, Verification PASS (ORNELYON's file hash check), Acceptance PENDING. Claude Code reported the two lines, CRLF and 44 bytes |
+| Passport and handoff B: `handoff --to claude --instruction ...` | Execution SUCCESS, Verification NOT_RUN, Acceptance NOT_REQUIRED. The sha256 of the prompt stored in history equals `handoff.contextSha256` (`153e0892a31a`). B's answer states that A's claims match the file. **No trace of B opening or reading the file was saved**, so that B read the file is not proven; what is shown is that B received the exact text and that its answer agrees with the file as ORNELYON's hash check saw it |
+| Side effects | The file hash was unchanged; the workspace holds only that file |
+| Calls and cost | Claude Code 2 calls; Codex 0. Claude Code's own reported figure for the two calls: $0.2699 (tokens in 8, out 1302). It is not an invoice or a quota figure |
+| Codex | **Not run (NOT_TESTED).** The Windows sandbox helper of Codex has an earlier recorded side effect on this machine's profile permissions and a standing decision not to run it without a new decision, and nothing may be loosened for a test. No Codex call, no Claude Code to Codex and no Codex to Claude Code handoff was made |
+| Terms | Whether a third-party tool may drive these CLIs under a subscription sign-in stays **NOT CONFIRMED**. One successful run does not change that |
+
+Only the Claude Code to Claude Code route has real-agent evidence, now from v0.3.0, v0.3.1 and this check. The other eight routes remain NOT_TESTED. A handoff that edits files, a real failure, and macOS and Linux were not tested.
+
+### 18.4 Tests and package checks (measured on Windows 11, Node.js 24.19.0, this machine)
+
+Offline tests and real-agent runs are counted separately and are not added together.
+
+| Check | Result |
+| --- | --- |
+| TypeScript build | PASS |
+| `npm test` (build + all offline tests, no real agent) | PASS: 286 tests, 286 pass, 0 fail (281 before this release, 5 added) |
+| Token test cases (in the offline suite) | `abc.def`, `abc+def=`, a single quote, a double quote, backslashes, `</script><script>alert(1)</script>`, `<!-- x`, `$& $1 $$` and a backtick, U+2028 with U+2029, a token that contains the version placeholder, and non-ASCII text. The test first checks that each string really contains the intended characters, then checks: page 200, no placeholder left, same number of inline scripts as the template, no raw U+2028 or U+2029, the script compiles (`vm.Script`), the literal evaluates to exactly the token, the printed URL decodes to the token, and (for ASCII tokens, which an HTTP header can carry) 200 with the token, 401 with a changed token and 401 without |
+| `git diff --check` | PASS (the extra blank line at the end of this file was removed) |
+| Stale build output | Reproduced in an isolated copy with `dist/audit-stale.js`, `dist/core/removed-module.js` and `.js.map` files that have no source: none of them is in the zip (58 entries, CRC test clean, no `dist/test`). Run twice (same-version regeneration works). A planted `ORNELYON-0.0.9.zip` and a copy of the v0.4.1 zip were byte-identical afterwards. A deliberate compile error left the existing 0.4.2 zip unchanged and no `.build` folder in the zip |
+| Zip extracted to a new folder, started with an isolated data folder | CLI `doctor` and GUI start: 200, `v0.4.2`, no placeholder, no old name, token embedded once, 401 without and 200 with the token |
+| v0.4.1 artifacts | `ORNELYON-0.4.1.zip` sha256 `206c63e1eb0cf1e273199ebcda42515482e508c2479e54cea560c3afff2d3df0`: identical before the first change, after the backup, after each package run, and at the end of this phase; the `ORNELYON-0.4.1` folder's file-list hash was identical too |
+| Same version generated twice | The zip is valid; its bytes differ because entry timestamps are stored. It is not reproducible byte for byte |
+| Real browser | PASS in the first round (built-in browser, extracted zip, small viewport only); other browsers and sizes NOT_TESTED |
+
+### 18.5 Old-name residue scan of the development zip (Phase B2; all letter cases)
+
+Scanned: file names and all lines of every entry of the freshly built zip (58 entries, 48 text files, no binary entry) including the compiled JavaScript, plus the source, the CLI help and the GUI page. Binary content could not be searched; there was none. For this scan only, the text of this section 18 was left out of the counts; the final scan in 18.10 includes it. **PUBLIC_UNINTENDED: 0. UNKNOWN: 0.**
+
+| Class | Count | What | Why it stays |
+| --- | --- | --- | --- |
+| COMPAT_REQUIRED | 32 | `CHIMERA_HOME` (paths, MCP, docs), `start-chimera.bat` and `.sh` (names and mentions), `x-chimera-token`, `__CHIMERA_TOKEN__` (page and compiled server), the `chimera` bin alias in `package.json` and `package-lock.json`, the documented `chimera` alias (README, CLI help text) | Existing installs and clients depend on them |
+| HISTORICAL | 23 | The README and README_ja sentence saying "CHIMERA Harness" and "NEXORA Harness" are earlier names; the comment lines of the two legacy launchers; sections 1 to 17 of this report | Correct history; sections 1 to 17 are kept as written |
+| PUBLIC_UNINTENDED | 0 | none | |
+| UNKNOWN | 0 | none | |
+
+Internal identifiers such as `ChimeraConfig` exist in the source and tests (COMPAT_REQUIRED, internal type name); the compiled output of a type-only name carries no text. The classification is rule based: each hit was assigned by a pattern for the compatibility names, by the "earlier names" and launcher-origin sentences, and by position (before this section) for the older report sections; a hit that matched no rule would have been UNKNOWN. The final zip must be scanned again (see 18.6).
+
+### 18.6 What was checked on which artifact
+
+| Artifact | Checked | State |
+| --- | --- | --- |
+| 1. Development source | build, 286 offline tests, `git diff --check`, name scan of the source | PASS |
+| 2. Development zip (`dist-package/ORNELYON-0.4.2.zip`, built from the development tree) | entries, CRC, stale-file test, extracted CLI and GUI start, name scan, secret and personal-data scan: no key-like strings, no e-mail address, no user name. **It still contains personal environment paths**: `IMPLEMENTATION_REPORT.md` line 94 holds the local development folder path and line 133 holds the path of the default Windows user-profile folder (section 1 to 17 text, unchanged on purpose) | PASS for the checks listed; **not publishable as is** |
+| 3. Final zip after the public-only edits (README issue URL, SECURITY contact, report path masking, `.bat` CRLF) | At the time of the first version of this table: not built. Built later from a separate stage, see 18.10 | See 18.10 |
+
+### 18.7 First audit (BLOCKED) and how it was answered
+
+The first independent audit passed all 285 tests but blocked the release. Seven points (as handed over in the task description) and their answers:
+
+| Point | Answer |
+| --- | --- |
+| Stale `dist` files enter the zip (reproduced with `dist/audit-stale.js`) | Fixed: fresh build folder (18.1, 18.4) |
+| The token character limit rejects safe values such as `abc.def` and `abc+def=` | Fixed: JSON literal embedding (18.1, 18.4) |
+| README conditions on availability and capability were inexact | Corrected from the code (18.2) |
+| README wording of verified versus implemented routes | Four statements kept apart (18.2) |
+| This section mixed source, development zip and final zip | Separated (18.6) |
+| Personal paths remain in the development zip | Recorded (18.6); removal is a public-only edit for the next phase |
+| `git diff --check` reported a blank line at the end of this file | Fixed |
+
+### 18.8 Known minor limit (not fixed in this release)
+
+If the compile step of `npm run package` fails, the temporary folder `dist-package/.build-ORNELYON-<version>` can stay behind. It is removed at the start of the next run, it is never copied into a zip, and the failed run leaves existing packages untouched (checked in 18.4). It was left as it is on purpose, to keep this release to the audited changes.
+
+### 18.9 State of the development tree
+
+Uncommitted. The public repository, tags, Releases and published zips were not touched. The public-only edits are not applied in the development tree; they exist in the separate release-candidate stage described next.
+
+### 18.10 Release candidate (built from a separate stage)
+
+The distributable candidate is not built from the development tree. It was built in a private stage outside both repositories: the tracked files of the published v0.4.1 commit were exported (`git archive`, no history), then exactly eleven files were brought over from the development tree: seven unchanged on the public side were copied (`UNINSTALL.md`, `package.json`, `package-lock.json`, `scripts/package.mjs`, `src/interface/server.ts`, `src/test/server.test.ts`, `web/index.html`) and four were merged three-way (`README.md`, `README_ja.md`, `SECURITY.md`, this report) so that the public-only edits stay: the issue URL, the private vulnerability reporting notice, and the masked personal paths of the older sections. Launchers keep CRLF; `start-chimera.*` are kept. After the merge, the stage differs from the published v0.4.1 only in those eleven files, and from the development tree only in those public-only lines.
+
+Three small corrections were made before the build: the README text on a local server's availability now says that no answer, or an answer to `/models` of HTTP 500 or higher, makes it unavailable, while a rejected key, an unknown model or an error on the chat request is found only when the agent runs; section 18.3 no longer says that agent B compared the claims with the file (the saved evidence shows what B received and what B said, not that B opened the file); the token test is named and commented so that restoring the script literal (every token) and HTTP authentication (printable ASCII tokens only) are separate claims.
+
+Checks on the candidate zip itself (structure and CRC, entry list, extraction, CLI and GUI start, 200 and 401, version display, placeholders, old-name ledger over every file name and line including this section, personal-data and secret scan) and the independent audit are kept in a separate audit record, not in this file or in the zip, so that the zip does not have to contain its own hash. The record, not this section, is the authority for the final counts.
+
+What stays unverified is unchanged: any Codex run, the other eight handoff routes, the local LLM routes, macOS, Linux, Node.js 20, and the terms question (NOT CONFIRMED). That agent B opened the file was not proven.
