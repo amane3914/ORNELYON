@@ -1,0 +1,4 @@
+interface:
+  display_name: "ornelyon-resume-preview"
+policy:
+  allow_implicit_invocation: false

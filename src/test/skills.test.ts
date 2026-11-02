@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash, randomUUID } from 'node:crypto';
-import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -62,7 +62,10 @@ test('skills: three bundled skills, each a plain SKILL.md folder with valid fron
   assert.deepEqual(skills.map((s) => s.name), EXPECTED);
   for (const s of skills) {
     const dir = join(bundledSkillsDir(), s.name);
-    assert.deepEqual(readdirSync(dir), ['SKILL.md'], 'nothing but SKILL.md: no scripts to run');
+    assert.deepEqual(readdirSync(dir).sort(), ['SKILL.md', 'agents'], 'SKILL.md and the Codex metadata only: no scripts to run');
+    assert.deepEqual(readdirSync(join(dir, 'agents')), ['openai.yaml']);
+    // Codex: explicit use only. The display name equals the name so a picker cannot insert a differently cased mention.
+    assert.equal(readFileSync(join(dir, 'agents', 'openai.yaml'), 'utf8'), `interface:\n  display_name: "${s.name}"\npolicy:\n  allow_implicit_invocation: false\n`);
     const fm = frontmatter(s.skillMd);
     assert.equal(fm.name, s.name, 'name equals the folder name');
     assert.match(fm.name, /^[a-z0-9]+(-[a-z0-9]+)*$/);
@@ -176,12 +179,89 @@ test('install: an update replaces an unchanged older copy and leaves no temporar
   applyInstall(target);
   const dir = join(target, skill.name);
   const old = 'OLD VERSION\n';
+  // The first v0.7.0 build wrote SKILL.md and a one-file marker only.
+  rmSync(join(dir, 'agents'), { recursive: true });
   writeFileSync(join(dir, 'SKILL.md'), old);
   writeFileSync(join(dir, '.ornelyon-skill.json'), JSON.stringify({ skill: skill.name, sha256: createHash('sha256').update(old).digest('hex') }));
-  assert.equal(planInstall(target).find((p) => p.name === skill.name)?.action, 'UPDATE');
+  assert.equal(planInstall(target).find((p) => p.name === skill.name)?.action, 'UPDATE', 'a legacy marker is read as a one-file list');
   applyInstall(target);
   assert.equal(readFileSync(join(dir, 'SKILL.md'), 'utf8'), skill.skillMd);
+  assert.ok(existsSync(join(dir, 'agents', 'openai.yaml')), 'the new file arrives with the update');
   assert.deepEqual(readdirSync(target).sort(), EXPECTED);
+  // A legacy copy that was edited is still left alone.
+  rmSync(join(dir, 'agents'), { recursive: true });
+  writeFileSync(join(dir, 'SKILL.md'), 'EDITED BY ME');
+  writeFileSync(join(dir, '.ornelyon-skill.json'), JSON.stringify({ skill: skill.name, sha256: createHash('sha256').update(old).digest('hex') }));
+  assert.equal(planInstall(target).find((p) => p.name === skill.name)?.action, 'KEEP_MODIFIED');
+});
+
+test('install/remove: every written file is checked by hash; a changed Codex file, an added file or a link keeps the folder', () => {
+  const home = freshHome();
+  const target = join(home, 'skills');
+  applyInstall(target);
+  const dir = join(target, 'ornelyon-task-history');
+  const yaml = join(dir, 'agents', 'openai.yaml');
+  const original = readFileSync(yaml, 'utf8');
+  writeFileSync(yaml, original.replace('false', 'true'));
+  assert.equal(planRemove(target).find((p) => p.name === 'ornelyon-task-history')?.action, 'KEEP_MODIFIED', 'the policy file was changed');
+  assert.equal(planInstall(target).find((p) => p.name === 'ornelyon-task-history')?.action, 'KEEP_MODIFIED');
+  applyRemove(target);
+  assert.equal(readFileSync(yaml, 'utf8'), original.replace('false', 'true'), 'nothing of the changed folder was deleted');
+  writeFileSync(yaml, original);
+  assert.equal(planRemove(target).find((p) => p.name === 'ornelyon-task-history')?.action, 'REMOVE');
+  // An extra file inside agents/ also protects the folder, and removal never deletes a non-empty folder.
+  writeFileSync(join(dir, 'agents', 'mine.yaml'), 'x');
+  assert.equal(planRemove(target).find((p) => p.name === 'ornelyon-task-history')?.action, 'KEEP_MODIFIED');
+  rmSync(join(dir, 'agents', 'mine.yaml'));
+  // A file missing from an incomplete install: left alone, not repaired by guessing.
+  rmSync(yaml);
+  assert.equal(planInstall(target).find((p) => p.name === 'ornelyon-task-history')?.action, 'KEEP_MODIFIED');
+  writeFileSync(yaml, original);
+  // A link inside the folder (to somewhere that holds user data) is never followed or removed with the target.
+  const outside = join(home, 'outside');
+  mkdirSync(outside);
+  writeFileSync(join(outside, 'precious.txt'), 'keep');
+  let linked = false;
+  try {
+    symlinkSync(outside, join(dir, 'link'), 'junction');
+    linked = true;
+  } catch {
+    /* no right to create links here */
+  }
+  if (linked) {
+    assert.equal(planRemove(target).find((p) => p.name === 'ornelyon-task-history')?.action, 'KEEP_MODIFIED');
+    applyRemove(target);
+    assert.equal(readFileSync(join(outside, 'precious.txt'), 'utf8'), 'keep');
+    rmSync(join(dir, 'link'), { recursive: true, force: true });
+  }
+  // The skill folder itself being a link: foreign, never replaced or deleted through.
+  rmSync(dir, { recursive: true });
+  let dirLinked = false;
+  try {
+    symlinkSync(outside, dir, 'junction');
+    dirLinked = true;
+  } catch {
+    /* no right to create links here */
+  }
+  if (dirLinked) {
+    assert.equal(planInstall(target).find((p) => p.name === 'ornelyon-task-history')?.action, 'SKIP_FOREIGN');
+    applyInstall(target);
+    applyRemove(target);
+    assert.equal(readFileSync(join(outside, 'precious.txt'), 'utf8'), 'keep');
+    assert.deepEqual(readdirSync(outside), ['precious.txt'], 'nothing was written through the link');
+  }
+});
+
+test('install: a folder left by an interrupted run is reported and never deleted; a clean remove leaves the target folder empty', () => {
+  const home = freshHome();
+  const target = join(home, 'skills');
+  mkdirSync(join(target, '.ornelyon-task-history.tmp-abc123'), { recursive: true });
+  writeFileSync(join(target, '.ornelyon-task-history.tmp-abc123', 'half.txt'), 'x');
+  const plan = applyInstall(target);
+  assert.ok(plan.some((p) => p.action === 'LEFTOVER'));
+  assert.ok(existsSync(join(target, '.ornelyon-task-history.tmp-abc123', 'half.txt')));
+  applyRemove(target);
+  assert.deepEqual(readdirSync(target), ['.ornelyon-task-history.tmp-abc123'], 'only the leftover remains');
 });
 
 test('remove: only unmodified installed copies go; an edited copy stays', () => {
@@ -193,6 +273,7 @@ test('remove: only unmodified installed copies go; an edited copy stays', () => 
   assert.equal(plan.find((p) => p.name === 'ornelyon-task-history')?.action, 'KEEP_MODIFIED');
   assert.deepEqual(readdirSync(target), ['ornelyon-task-history']);
   assert.match(readFileSync(join(target, 'ornelyon-task-history', 'SKILL.md'), 'utf8'), /my note/);
+  assert.ok(existsSync(join(target, 'ornelyon-task-history', 'agents', 'openai.yaml')));
   // Removing again, and removing from an empty place, are harmless.
   assert.ok(applyRemove(join(home, 'nowhere')).every((p) => p.action === 'NOT_INSTALLED'));
 });

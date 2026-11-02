@@ -1,0 +1,4 @@
+interface:
+  display_name: "ornelyon-evidence-check"
+policy:
+  allow_implicit_invocation: false
