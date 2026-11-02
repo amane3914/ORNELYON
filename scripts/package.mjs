@@ -56,6 +56,7 @@ for (const file of [
   'CONTRIBUTING.md',
   'SECURITY.md',
   'docs/NATIVE_GUI_INTEGRATION.md',
+  'docs/PHASE1_GUI_VERIFICATION.md',
 ]) {
   if (!existsSync(join(root, file))) {
     throw new Error(`Missing packaged file: ${file}`);

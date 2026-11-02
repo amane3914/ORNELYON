@@ -43,8 +43,8 @@ Verified on 2026-11-02 on this machine (Windows 11, Node, Claude Code 2.1.311, C
 | `codex mcp add` accepts the registration; `codex mcp get` and `list` show it | PASS (config accepted only; `codex mcp list` does not connect) |
 | `claude mcp add --scope user` accepts it; `claude mcp list` health check shows **Connected** | PASS (real Claude Code CLI handshake, no model call) |
 | Protocol the real Claude Code sent | It first sent `server/discover` (2026-07-28), got "method not found", then `initialize` with `2025-11-25`. The documented fallback works. |
-| Claude desktop app (Code tab) shows and calls the tools | **NOT_TESTED** |
-| Codex app / IDE extension shows and calls the tools | **NOT_TESTED** |
+| Claude desktop app (Code tab) shows and calls the tools | **NOT_TESTED** (Phase 1: BLOCKED, see PHASE1_GUI_VERIFICATION.md) |
+| Codex app / IDE extension shows and calls the tools | **NOT_TESTED** (Phase 1: the app's own engine 0.166.0 lists all 6 tools, PASS; the window was not operated) |
 | Codex CLI real handshake and tool call | **NOT_TESTED** (needs a model turn, which is a paid call) |
 | Claude Code tool call inside a model turn | **NOT_TESTED** (same reason) |
 | Codex app version actually in use (may differ from CLI 0.162.1 on PATH) | **NOT_TESTED** |
