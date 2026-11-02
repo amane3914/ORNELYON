@@ -9,8 +9,9 @@ import { selfTest } from './mcp-selftest.js';
 
 /**
  * Diagnosis of the ORNELYON MCP / native-GUI setup. It only looks: it never registers, removes or edits a client
- * setting, and it starts nothing but this build's own self-test and the clients' read-only `get` / `list --json`
- * commands. Every item carries the exact command that would repair it; running that command is up to the user.
+ * setting, and it starts nothing but this build's own self-test, `codex mcp list --json` and `claude mcp get <name>`.
+ * Note that `claude mcp get` checks the health of the entry and so launches the registered server command; for that reason it is
+ * only asked about entries whose name starts with "ornelyon", and it runs from the home folder so that a project's .mcp.json is not picked up. Every item carries the exact command that would repair it; running that command is up to the user.
  */
 export type DoctorStatus = 'PASS' | 'FAIL' | 'WARN' | 'UNKNOWN' | 'NOT_TESTED';
 
@@ -149,8 +150,12 @@ const defaultRun: Run = async (command, args) => {
   if (exe === null) {
     return { code: null, stdout: '' };
   }
-  const r = await runProcess({ command: exe, args, cwd: process.cwd(), timeoutMs: 20000 });
-  return { code: r.code, stdout: r.stdout };
+  try {
+    const r = await runProcess({ command: exe, args, cwd: homedir(), timeoutMs: 20000 });
+    return { code: r.code, stdout: r.stdout };
+  } catch {
+    return { code: 1, stdout: '' };
+  }
 };
 
 /** Registrations of ORNELYON in the installed clients. `names` are the entries to look for in Claude Code. */
@@ -170,6 +175,10 @@ export async function findRegistrations(names: string[], run: Run = defaultRun):
     notes.push({ id: 'claude:cli', label: 'Claude Code found', status: 'NOT_TESTED', detail: 'claude is not on PATH, so its registration was not looked at.', fix: null });
   } else {
     for (const name of [...new Set(names)]) {
+      if (!/^ornelyon[A-Za-z0-9._-]{0,40}$/i.test(name)) {
+        notes.push({ id: `claude:skip:${name.replace(/[^A-Za-z0-9._-]/g, '?').slice(0, 40)}`, label: 'Claude Code entry not looked at', status: 'NOT_TESTED', detail: 'Only entries whose name starts with "ornelyon" are asked about, because `claude mcp get` launches the registered server.', fix: null });
+        continue;
+      }
       const got = await run('claude', ['mcp', 'get', name]);
       const reg = got.code === 0 ? parseClaudeGet(name, got.stdout) : null;
       if (reg) {
@@ -177,7 +186,9 @@ export async function findRegistrations(names: string[], run: Run = defaultRun):
       }
     }
   }
-  return { regs, notes };
+  // Text from a client's output is printed later; control characters (ANSI escapes) are dropped.
+  const clean = (t: string): string => t.replace(/[ -]/g, '');
+  return { regs: regs.map((r) => ({ ...r, command: clean(r.command), args: r.args.map(clean) })), notes };
 }
 
 /** History and passport health, read only. */
@@ -244,7 +255,7 @@ export async function diagnoseMcp(cliPath: string, config: ChimeraConfig, names:
     id: 'mcp-selftest',
     label: 'ORNELYON MCP server answers (read-only self-test, no model call)',
     status: st.ok ? 'PASS' : 'FAIL',
-    detail: st.ok ? `${st.lines.length} step(s) passed` : failed.map((l) => l.replace(/^FAIL\s+/, '')).join('; ').replace(homedir(), '~'),
+    detail: st.ok ? `${st.lines.length} step(s) passed` : failed.map((l) => l.replace(/^FAIL\s+/, '')).join('; ').split(homedir()).join('~'),
     fix: st.ok ? null : 'Run `npm run build`, then `node dist/interface/cli.js mcp --self-test` for the full list.',
   });
   const { regs, notes } = await findRegistrations(names, run);

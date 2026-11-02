@@ -131,7 +131,7 @@ test('doctor: the whole diagnosis runs offline, changes nothing, and reports his
   assert.equal(status(ok, 'history'), 'PASS');
   assert.equal(status(ok, 'gui'), 'NOT_TESTED', 'a GUI window is never claimed');
   assert.ok(ok.every((i) => i.status !== 'FAIL'));
-  assert.ok(!JSON.stringify(ok).includes(h), 'the data folder path is not printed');
+  assert.ok(!JSON.stringify(ok).includes(h) && !JSON.stringify(ok).includes(JSON.stringify(h).slice(1, -1)), 'the data folder path is not printed');
 
   // Damage: an unreadable history line and an edited passport.
   appendFileSync(historyPath(), 'garbage\n');
@@ -152,4 +152,20 @@ test('doctor: paths under the home folder are shortened', () => {
   assert.equal(shortPath('/home/someone/proj', '/home/someone'), '~/proj');
   assert.equal(shortPath('/opt/x', '/home/someone'), '/opt/x');
   assert.equal(shortPath('/home/someone2/x', '/home/someone'), '/home/someone2/x', 'a longer name is not a match');
+});
+
+test('doctor: only entries named ornelyon* are asked about (claude mcp get launches the server), and control characters are dropped', async () => {
+  const asked: string[] = [];
+  const run = async (cmd: string, args: string[]) => {
+    asked.push(`${cmd} ${args.join(' ')}`);
+    if (cmd === 'codex') {
+      return { code: 0, stdout: JSON.stringify([{ name: 'ornelyon', transport: { type: 'stdio', command: 'node\u001b[31m.exe', args: ['/x/dist/interface/cli.js', 'mcp'] } }]) };
+    }
+    return { code: 0, stdout: args[0] === '--version' ? '1.0' : 'No MCP server named' };
+  };
+  const found = await findRegistrations(['ornelyon', 'blender'], run);
+  assert.ok(asked.some((a) => a === 'claude mcp get ornelyon'));
+  assert.ok(!asked.some((a) => a.includes('blender')), 'a foreign entry is never asked about');
+  assert.ok(found.notes.some((n) => n.status === 'NOT_TESTED' && n.id.includes('blender')));
+  assert.equal(found.regs[0].command, 'node[31m.exe');
 });

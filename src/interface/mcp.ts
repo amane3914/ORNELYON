@@ -161,7 +161,7 @@ const TOOLS: ToolDef[] = [
   {
     name: 'ornelyon_recent_tasks',
     description:
-      'Read-only. Search the tasks this server may show, newest first, with their agent, kind and Execution / Verification / Acceptance states and whether a passport file is present. Optional filters: taskId, agent, execution, verification, decision. With incomplete=true it lists instead the tasks that have agent-call records but no final record (they may still be running, or may have ended abnormally; history cannot tell which). No prompts or outputs. A task outside the scope and one that does not exist are both simply absent.',
+      'Read-only. Search the tasks this server may show, newest first, with their agent, kind and Execution / Verification / Acceptance states and whether a passport file is present. Optional filters: taskId, agent, execution, verification, decision. With incomplete=true it lists instead the tasks that have agent-call records but no final record (they may still be running, or may have ended abnormally; history cannot tell which). Only tasks already in the scope the operator chose can appear: --recent lists finished tasks only, so add a task with --allow-task or use --all-tasks. No prompts or outputs. A task outside the scope and one that does not exist are both simply absent.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -202,8 +202,9 @@ const TOOLS: ToolDef[] = [
           scope: opts.tasks === 'all' ? 'all tasks' : `${opts.tasks.length} task(s) chosen by the operator`,
           filters: { incomplete: true, ...(a.taskId === undefined ? {} : { taskId: a.taskId }) },
           matched: found.length,
+          ...(readRecords().skippedLines > 0 ? { historyWarning: 'Some history lines could not be read, so a finished task whose final line was unreadable can appear here.' } : {}),
           tasks: found.slice(0, limit),
-          notice: 'NO_FINAL_RECORD means only that call records exist without a final record. The task may still be running, or may have ended without writing one; history cannot tell which, so none of these is called interrupted. Their agents may have changed files. Nothing was resumed, and no saved passport or Evidence Gate record exists to resume from. A task that is listed is not a task that can be resumed.',
+          notice: 'NO_FINAL_RECORD means only that call records exist without a final record. The task may still be running, or may have ended without writing one; history cannot tell which, so none of these is called interrupted. Their agents may have changed files. Nothing was resumed, and a final record is needed before a passport or Evidence Gate record can be made. A task that is listed is not a task that can be resumed.',
         };
       }
       const filter = { taskId: a.taskId as string | undefined, agent, execution, verification, acceptance, allow: inScope };

@@ -836,7 +836,7 @@ test('output: every tool answers briefly, identically twice in a row, and with n
     assert.equal(first.isError, false, name);
     assert.equal(first.text, second.text, `${name} gives the same text twice (stable key and row order)`);
     assert.ok(first.text.length < 9000, `${name} is ${first.text.length} characters`);
-    assert.ok(!first.text.includes(env.home) && !first.text.includes(env.root), `${name} shows no local path`);
+    assert.ok(![env.home, env.root].some((p) => first.text.includes(p) || first.text.includes(JSON.stringify(p).slice(1, -1))), `${name} shows no local path`);
     assert.ok(!/ws1:[0-9a-f]{16}/.test(first.text), `${name} shows no workspace label`);
   }
   // 20 rows of the biggest listing stay small.

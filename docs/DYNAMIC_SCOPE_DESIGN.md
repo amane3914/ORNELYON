@@ -41,14 +41,15 @@ Decision: **HOLD. The static scope stays. Nothing was implemented.** This file r
 Prerequisite 1 now exists: new task summaries carry a workspace label (docs/WORKSPACE_IDENTITY.md). The question was whether `--workspace-tasks` (new tasks whose label equals the server's) is a safe boundary. It is not, for these reasons:
 
 1. **The label does not discriminate.** ORNELYON has one global `workspaceRoot`. Every task started from that installation gets the same label, whichever client, window or person started it. "Same workspace and newer than the server" therefore equals option A (all future tasks of the data folder) in practice. A second label only appears if the operator changes the setting, which is not a security boundary.
-2. **The label is not an identity of the requester.** It is computed from the configuration at record time. It says where the task ran, not who asked, and not which MCP session the operator had in mind.
+2. **The label has no integrity protection.** `history.jsonl` is a plain append file and the key sits in the same user's data folder, so any same-user process can write a record carrying a matching label without going through ORNELYON at all.
+2b. **The label is not an identity of the requester.** It is computed from the configuration at record time. It says where the task ran, not who asked, and not which MCP session the operator had in mind.
 3. **Any same-user process can create matching tasks.** The CLI, the WebUI, a handoff or another MCP client can all produce a record that matches, and the operator would not have named it. With content off the exposure is ids, states, agent and kind; with content on (`--expose-content`) it would include prompts and reports of tasks nobody chose. Content mode would have to be refused together with the rule, and that leaves a rule whose benefit (see new task states without restart) is small compared with the widening.
 4. **Old and damaged records.** Old history has no label (UNKNOWN, never filled in). A rule that depends on the label silently excludes it, so the same server would show a different set the day after an upgrade, which is the silent change option B was rejected for.
 5. **Three paths must agree.** Search, Evidence and Passport each need the identical test, applied before counts and limits, and the tests must prove that hidden tasks never change `matched`. This is doable, but it is complexity bought for a rule that fails points 1 to 3.
 
 **Decision: the static scope stays.** What Phase 1 added instead, with no widening of scope:
 
-- `ornelyon_recent_tasks` with `incomplete=true` lists tasks of the **existing** scope that have call records but no final record.
+- `ornelyon_recent_tasks` with `incomplete=true` lists tasks of the **existing** scope (so under the default `--recent` scope, which holds finished tasks only, it finds nothing until the id is added with `--allow-task` or `--all-tasks` is used) that have call records but no final record.
 - The operator can restart the server with the new task id (`ornelyon mcp --print-config --allow-task <id>`).
 
 Unresolved, in the order they would have to be settled before a dynamic scope is reopened:

@@ -52,22 +52,26 @@ test('the same folder gives the same label however it is written; another folder
   assert.notEqual(workspaceIdFor(b, true), idA);
   // A symbolic link to the folder is the same folder. (Creating links can need rights on Windows: skip then.)
   const link = join(h, 'link');
+  let linked = false;
   try {
     symlinkSync(a, link, 'junction');
-    assert.equal(workspaceIdFor(link, true), idA);
+    linked = true;
   } catch {
     /* no right to create links here */
+  }
+  if (linked) {
+    assert.equal(workspaceIdFor(link, true), idA);
   }
   if (process.platform === 'win32') {
     assert.equal(workspaceIdFor(a.toUpperCase(), true), idA, 'letter case does not matter on Windows');
   }
   // The label carries no part of the path, and the same folder under a different key does not match, so a copied
   // label cannot be checked against guessed paths.
-  assert.ok(!idA?.includes('proj') && !(idA ?? '').toLowerCase().includes(h.slice(-6).toLowerCase()));
-  const other = freshHome();
-  const copy = join(other, 'a');
-  mkdirSync(copy);
-  assert.notEqual(workspaceIdFor(copy, true), idA);
+  assert.ok(!(idA ?? '').toLowerCase().includes(h.slice(-6).toLowerCase()));
+  // Same folder, another key: another label.
+  writeFileSync(workspaceKeyPath(), `${'ab'.repeat(32)}
+`);
+  assert.notEqual(workspaceIdFor(a, true), idA);
   assert.ok(canonicalWorkspacePath(a)?.includes('/'));
 });
 
