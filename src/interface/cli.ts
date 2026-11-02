@@ -6,6 +6,7 @@ import { loadConfig, saveConfig, type AgentKey, type ToolState } from '../core/c
 import { configPath, dataDir, packageRoot } from '../core/paths.js';
 import { MCP_TOOL_NAMES, registrationHelp, serveStdio } from './mcp.js';
 import { selfTest } from './mcp-selftest.js';
+import { diagnoseMcp } from './doctor.js';
 import { cmdBenchmark } from './cli-benchmark.js';
 import { readRecords } from '../core/history.js';
 import { setToolState, TOOL_STATES } from '../optimization/dormancy.js';
@@ -40,7 +41,7 @@ const USAGE = `ORNELYON
 
 Usage:
   ornelyon gui [--port N]                 Start the local setup and dashboard (127.0.0.1 only)
-  ornelyon doctor                         Check runtime, agents, sign-in state and setup checks
+  ornelyon doctor [--name <entry>]        Check runtime, agents, sign-in state, setup and the MCP / GUI registration (looks only)
   ornelyon run "<prompt>" [options]       Run one task. Prints the result and its evidence.
       --agent codex|claude|local          Agent to use (L1 manual mode, or the main agent)
       --kind <label>                      Task category for routing, e.g. code
@@ -127,7 +128,7 @@ function positional(args: string[]): string[] {
   return out;
 }
 
-async function cmdDoctor(): Promise<number> {
+async function cmdDoctor(args: string[]): Promise<number> {
   const loaded = loadConfig();
   const det = await detectAgents(loaded.config, true);
   const checks = runSetupChecks(loaded.config, det);
@@ -144,7 +145,15 @@ async function cmdDoctor(): Promise<number> {
     console.log(`[${mark}] ${c.label}: ${c.detail}${c.fix ? `\n       fix: ${c.fix}` : ''}`);
   }
   console.log(setupCanComplete(checks) ? 'Setup can be completed.' : 'Setup has errors. Fix them in `ornelyon gui`.');
-  return setupCanComplete(checks) ? 0 : 1;
+  // The GUI integration section only looks. Repairs are printed as commands for you to run; nothing is changed.
+  const mcp = await diagnoseMcp(fileURLToPath(import.meta.url), loaded.config, ['ornelyon', ...flagAll(args, '--name')]);
+  console.log('\nORNELYON MCP / GUI integration (diagnosis only, nothing is changed):');
+  for (const i of mcp) {
+    console.log(`[${i.status.padEnd(10)}] ${i.label}: ${i.detail}${i.fix ? `\n             fix: ${i.fix}` : ''}`);
+  }
+  const mcpFailed = mcp.some((i) => i.status === 'FAIL');
+  console.log(mcpFailed ? 'MCP integration has FAIL items (see the fix lines).' : 'No MCP integration failure found. UNKNOWN and NOT_TESTED items were not verified.');
+  return setupCanComplete(checks) && !mcpFailed ? 0 : 1;
 }
 
 /** Parse the verification flags. A `:sha256` suffix pins the exact content that was reviewed. */
@@ -633,7 +642,7 @@ async function main(): Promise<number> {
     case 'gui':
       return cmdGui(rest);
     case 'doctor':
-      return cmdDoctor();
+      return cmdDoctor(rest);
     case 'run':
       return cmdRun(rest);
     case 'history':
