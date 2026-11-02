@@ -5,6 +5,8 @@ import { fileURLToPath } from 'node:url';
 import { loadConfig, saveConfig, type AgentKey, type ToolState } from '../core/config.js';
 import { configPath, dataDir, packageRoot } from '../core/paths.js';
 import { MCP_TOOL_NAMES, registrationHelp, serveStdio } from './mcp.js';
+import { applyInstall, applyRemove, bundledSkills, defaultTarget, planInstall, planRemove, resolveTarget } from './skills.js';
+import { HOOK_MAX_INPUT, stopHookOutput, stopHookSnippet } from './hook.js';
 import { selfTest } from './mcp-selftest.js';
 import { diagnoseMcp } from './doctor.js';
 import { cmdBenchmark } from './cli-benchmark.js';
@@ -56,6 +58,10 @@ Usage:
       --require-review                    Ask another enabled agent for an independent review
       --dry-run                           Show the dispatch plan and checks. Starts no agent.
       --timeout <seconds>                 Upper bound for this run
+  ornelyon skills list|install|remove [--client claude | --target <folder>] [--apply]
+                                          Bundled Agent Skills. Dry run unless --apply; never overwrites a skill you wrote.
+  ornelyon hooks print --task <id> [--task <id> ...]
+                                          Print (do not install) a Claude Code Stop-hook settings entry. Hooks are off until you add it.
   ornelyon accept <task-id> --reason "…" [--override]
                                           Record that you accept the task. --override is needed when a required check failed or is missing.
   ornelyon reject <task-id> --reason "…"  Record that you reject the task.
@@ -550,6 +556,87 @@ function cmdCost(args: string[]): number {
   return 0;
 }
 
+function cmdSkills(args: string[]): number {
+  const [sub] = args;
+  const apply = args.includes('--apply');
+  if (sub !== 'list' && sub !== 'install' && sub !== 'remove') {
+    console.error('Usage: ornelyon skills list|install|remove [--client claude | --target <folder>] [--apply]');
+    return 2;
+  }
+  const skills = bundledSkills();
+  if (skills.length === 0) {
+    console.error('No bundled skills were found in this copy of ORNELYON.');
+    return 1;
+  }
+  if (sub === 'list') {
+    for (const s of skills) {
+      console.log(`${s.name}  (sha256 ${s.sha256.slice(0, 12)})`);
+    }
+    console.log('Install with: ornelyon skills install --client claude   (dry run); add --apply to write.');
+    return 0;
+  }
+  const client = flag(args, '--client');
+  const explicit = flag(args, '--target');
+  const target = explicit !== undefined ? explicit : client !== undefined ? defaultTarget(client) : null;
+  if (target === null) {
+    console.error('Name where to put the skills: --client claude (the folder Claude Code documents) or --target <folder>. For Codex give --target; its skills folder is not confirmed by the official pages this build was checked against.');
+    return 2;
+  }
+  let folder: string;
+  try {
+    folder = resolveTarget(target);
+  } catch (e) {
+    console.error((e as Error).message);
+    return 2;
+  }
+  const plan = sub === 'install' ? (apply ? applyInstall(folder, skills) : planInstall(folder, skills)) : apply ? applyRemove(folder, skills) : planRemove(folder, skills);
+  console.log(`${apply ? 'Done' : 'Dry run (nothing written)'} - ${sub} in ${folder}`);
+  for (const p of plan) {
+    console.log(`  ${p.action.padEnd(14)} ${p.name}: ${p.detail}`);
+  }
+  if (!apply) {
+    console.log('Add --apply to do this. Existing folders that ORNELYON did not install are never touched.');
+  }
+  return 0;
+}
+
+function cmdHooks(args: string[]): number {
+  const ids = flagAll(args, '--task');
+  if (args[0] !== 'print' || ids.length === 0 || ids.some((t) => !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(t))) {
+    console.error('Usage: ornelyon hooks print --task <id> [--task <id> ...]   (ids are task UUIDs; nothing is installed)');
+    return 2;
+  }
+  console.log('Claude Code Stop-hook entry (printed only; nothing was changed). It shows the Evidence Gate state of the listed tasks to you, never blocks, never asks the model to continue, and starts no agent.');
+  console.log('Add it yourself to the "hooks" section of ~/.claude/settings.json (or a project settings file) to enable it; delete the entry to disable it. Not verified against a live Claude Code session.');
+  console.log(stopHookSnippet(process.execPath, fileURLToPath(import.meta.url), ids));
+  return 0;
+}
+
+/** Hook entry point. Reads one JSON object on stdin. Any problem ends in silence and exit code 0: a hook must never stop normal work. */
+async function cmdHook(args: string[]): Promise<number> {
+  if (args[0] !== 'stop') {
+    return 0;
+  }
+  try {
+    const chunks: Buffer[] = [];
+    let size = 0;
+    for await (const c of process.stdin) {
+      size += (c as Buffer).length;
+      if (size > HOOK_MAX_INPUT) {
+        return 0;
+      }
+      chunks.push(c as Buffer);
+    }
+    const out = stopHookOutput(Buffer.concat(chunks).toString('utf8'), flagAll(args, '--task'));
+    if (out !== null) {
+      process.stdout.write(`${out}\n`);
+    }
+  } catch {
+    /* silence */
+  }
+  return 0;
+}
+
 async function cmdMcp(args: string[]): Promise<number> {
   const exposeContent = args.includes('--expose-content');
   const allTasks = args.includes('--all-tasks');
@@ -668,6 +755,12 @@ async function main(): Promise<number> {
       return cmdBenchmark(rest);
     case 'mcp':
       return cmdMcp(rest);
+    case 'skills':
+      return cmdSkills(rest);
+    case 'hooks':
+      return cmdHooks(rest);
+    case 'hook':
+      return cmdHook(rest);
     case 'tool':
       return cmdTool(rest);
     case 'research':
