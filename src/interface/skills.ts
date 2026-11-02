@@ -18,7 +18,7 @@ import { packageRoot } from '../core/paths.js';
  */
 const MARKER = '.ornelyon-skill.json';
 const NAME_RE = /^[a-z0-9]+(-[a-z0-9]+)*$/;
-const REL_RE = /^[A-Za-z0-9._-]+(\/[A-Za-z0-9._-]+)*$/;
+const REL_RE = /^(?!\.{1,2}(\/|$))[A-Za-z0-9._-]+(\/(?!\.{1,2}(\/|$))[A-Za-z0-9._-]+)*$/;
 
 export function bundledSkillsDir(): string {
   return join(packageRoot(), 'integrations', 'skills');
@@ -174,9 +174,9 @@ function leftovers(target: string, skills: BundledSkill[]): SkillPlanItem[] {
   }
   const out: SkillPlanItem[] = [];
   for (const n of readdirSync(target).sort()) {
-    const owner = skills.find((s) => n.startsWith(`.${s.name}.tmp-`));
+    const owner = skills.find((s) => n.startsWith(`.${s.name}.tmp-`) || n.startsWith(`${s.name}.removing-`));
     if (owner) {
-      out.push({ name: owner.name, action: 'LEFTOVER', detail: `${n} was left by an interrupted install or update; it is safe to delete by hand (ORNELYON never deletes it)` });
+      out.push({ name: owner.name, action: 'LEFTOVER', detail: `${n} was left by an interrupted install, update or removal. It may hold an older or an edited copy of the skill: look at it before deleting. ORNELYON never deletes it, and a client may load it as a second copy of the skill` });
     }
   }
   return out;
@@ -225,10 +225,23 @@ function isLink(p: string): boolean {
   }
 }
 
+/** Every folder from `dir` down to the parent of `rel` must still be a plain folder, not a link swapped in since the check. */
+function assertPlainParents(dir: string, rel: string): void {
+  let cur = dir;
+  for (const part of ['', ...dirname(rel).split('/').filter((p) => p !== '.' && p !== '')]) {
+    cur = part === '' ? cur : join(cur, part);
+    const st = lstatSync(cur);
+    if (st.isSymbolicLink() || !st.isDirectory()) {
+      throw new Error(`${cur} is no longer a plain folder; nothing more was deleted`);
+    }
+  }
+}
+
 /** Delete exactly the listed files, then the folders that became empty. A folder that is not empty is left in place. */
 function removeListed(dir: string, manifest: Manifest): void {
   const dirs = new Set<string>();
   for (const rel of [...Object.keys(manifest), MARKER]) {
+    assertPlainParents(dir, rel);
     unlinkSync(join(dir, rel));
     for (let d = dirname(rel); d !== '.' && d !== ''; d = dirname(d)) {
       dirs.add(d);
@@ -269,15 +282,25 @@ function writeSkill(target: string, s: BundledSkill, replace: boolean): 'WRITTEN
     }
     renameSync(tmp, dest);
     if (moved) {
-      const old = ownership(backup, s.name);
-      if (old.kind === 'OWNED') {
-        removeListed(backup, old.manifest);
+      // The new copy is in place. Failing to clean the old one up must not undo that; the old copy then shows as LEFTOVER.
+      try {
+        const old = ownership(backup, s.name);
+        if (old.kind === 'OWNED') {
+          removeListed(backup, old.manifest);
+        }
+      } catch {
+        /* reported as LEFTOVER by the next plan */
       }
     }
     return 'WRITTEN';
   } catch (e) {
     if (moved && !existsSync(dest) && existsSync(backup)) {
-      renameSync(backup, dest);
+      try {
+        renameSync(backup, dest);
+      } catch {
+        // Could not put the old folder back: keep it where it is and say where.
+        throw new Error(`${(e as Error).message}; the previous copy of ${s.name} is kept at ${backup} (it may hold your edits)`);
+      }
     }
     removeTree(tmp, s);
     throw e;
@@ -316,14 +339,27 @@ export function applyRemove(target: string, skills = bundledSkills()): SkillPlan
     const dest = join(target, item.name);
     const aside = `${dest}.removing-${process.pid}`;
     // Move the folder away first so that exactly what is inspected is what is deleted.
-    renameSync(dest, aside);
-    const own = ownership(aside, item.name);
-    if (own.kind === 'OWNED') {
-      removeListed(aside, own.manifest);
-    } else {
-      renameSync(aside, dest);
+    try {
+      renameSync(dest, aside);
+    } catch (e) {
       item.action = 'KEEP_MODIFIED';
-      item.detail = 'changed while the removal ran; left as it was';
+      item.detail = `could not be moved aside (${(e as Error).message}); left as it was`;
+      continue;
+    }
+    try {
+      const own = ownership(aside, item.name);
+      if (own.kind !== 'OWNED') {
+        throw new Error('changed while the removal ran');
+      }
+      removeListed(aside, own.manifest);
+    } catch (e) {
+      try {
+        renameSync(aside, dest);
+        item.detail = `${(e as Error).message}; left as it was`;
+      } catch {
+        item.detail = `${(e as Error).message}; the folder is kept at ${aside} and was not put back`;
+      }
+      item.action = 'KEEP_MODIFIED';
     }
   }
   return plan;

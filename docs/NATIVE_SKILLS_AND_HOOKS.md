@@ -95,3 +95,5 @@ Hook set-up (Claude Code): the printed entry is `{"hooks":{"Stop":[{"hooks":[{"t
 ## Not verified
 
 No Claude Code or Codex window or session was started for this work, and no model was called. Skills were not loaded by a client; hooks were not fired by Claude Code. What is tested: file structure, tool names and arguments against the real MCP schemas, the installer on temporary folders, and the hook helper with synthetic stdin.
+
+Residual limit (known): between the ownership check and each delete, a process of the same user could still swap a folder inside the moved-aside copy for a link. Before every delete the parent folders are checked to be plain folders again, which narrows but does not remove that window. Hash checks read the file as UTF-8 text; NTFS alternate streams or macOS extended attributes on a matching file go away with it. A marker forged on purpose (a folder built to look like an unchanged ORNELYON install) is treated as ORNELYON's; that needs write access to your skills folder.

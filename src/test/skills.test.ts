@@ -221,35 +221,39 @@ test('install/remove: every written file is checked by hash; a changed Codex fil
   const outside = join(home, 'outside');
   mkdirSync(outside);
   writeFileSync(join(outside, 'precious.txt'), 'keep');
-  let linked = false;
-  try {
-    symlinkSync(outside, join(dir, 'link'), 'junction');
-    linked = true;
-  } catch {
-    /* no right to create links here */
-  }
-  if (linked) {
-    assert.equal(planRemove(target).find((p) => p.name === 'ornelyon-task-history')?.action, 'KEEP_MODIFIED');
-    applyRemove(target);
-    assert.equal(readFileSync(join(outside, 'precious.txt'), 'utf8'), 'keep');
-    rmSync(join(dir, 'link'), { recursive: true, force: true });
-  }
+  // Junctions need no special right on Windows and links work on macOS/Linux, so a failure to create one is a test failure.
+  symlinkSync(outside, join(dir, 'link'), 'junction');
+  assert.equal(planRemove(target).find((p) => p.name === 'ornelyon-task-history')?.action, 'KEEP_MODIFIED');
+  applyRemove(target);
+  assert.equal(readFileSync(join(outside, 'precious.txt'), 'utf8'), 'keep');
+  rmSync(join(dir, 'link'), { recursive: true, force: true });
+  // A link standing in for a listed folder (agents/) is caught by the link check itself, and the file behind it survives.
+  writeFileSync(join(outside, 'openai.yaml'), 'user file behind the link');
+  rmSync(join(dir, 'agents'), { recursive: true });
+  symlinkSync(outside, join(dir, 'agents'), 'junction');
+  assert.equal(planRemove(target).find((p) => p.name === 'ornelyon-task-history')?.action, 'KEEP_MODIFIED');
+  applyRemove(target);
+  assert.equal(readFileSync(join(outside, 'openai.yaml'), 'utf8'), 'user file behind the link');
+  rmSync(join(dir, 'agents'), { recursive: true, force: true });
+  rmSync(join(outside, 'openai.yaml'));
+  mkdirSync(join(dir, 'agents'));
+  writeFileSync(yaml, original);
   // The skill folder itself being a link: foreign, never replaced or deleted through.
   rmSync(dir, { recursive: true });
-  let dirLinked = false;
-  try {
-    symlinkSync(outside, dir, 'junction');
-    dirLinked = true;
-  } catch {
-    /* no right to create links here */
-  }
-  if (dirLinked) {
-    assert.equal(planInstall(target).find((p) => p.name === 'ornelyon-task-history')?.action, 'SKIP_FOREIGN');
-    applyInstall(target);
-    applyRemove(target);
-    assert.equal(readFileSync(join(outside, 'precious.txt'), 'utf8'), 'keep');
-    assert.deepEqual(readdirSync(outside), ['precious.txt'], 'nothing was written through the link');
-  }
+  symlinkSync(outside, dir, 'junction');
+  assert.equal(planInstall(target).find((p) => p.name === 'ornelyon-task-history')?.action, 'SKIP_FOREIGN');
+  applyInstall(target);
+  applyRemove(target);
+  assert.equal(readFileSync(join(outside, 'precious.txt'), 'utf8'), 'keep');
+  assert.deepEqual(readdirSync(outside), ['precious.txt'], 'nothing was written through the link');
+  // Even a link that points at a genuine, unchanged install is not followed: the link itself is not a plain folder.
+  rmSync(dir, { recursive: true });
+  const real = join(home, 'real-install');
+  applyInstall(real);
+  symlinkSync(join(real, 'ornelyon-task-history'), dir, 'junction');
+  assert.equal(planRemove(target).find((p) => p.name === 'ornelyon-task-history')?.action, 'SKIP_FOREIGN');
+  applyRemove(target);
+  assert.ok(existsSync(join(real, 'ornelyon-task-history', 'SKILL.md')), 'the install behind the link survives');
 });
 
 test('install: a folder left by an interrupted run is reported and never deleted; a clean remove leaves the target folder empty', () => {
@@ -258,8 +262,11 @@ test('install: a folder left by an interrupted run is reported and never deleted
   mkdirSync(join(target, '.ornelyon-task-history.tmp-abc123'), { recursive: true });
   writeFileSync(join(target, '.ornelyon-task-history.tmp-abc123', 'half.txt'), 'x');
   const plan = applyInstall(target);
-  assert.ok(plan.some((p) => p.action === 'LEFTOVER'));
+  assert.ok(plan.some((p) => p.action === 'LEFTOVER' && /look at it before deleting/.test(p.detail) && !/safe to delete/.test(p.detail)));
   assert.ok(existsSync(join(target, '.ornelyon-task-history.tmp-abc123', 'half.txt')));
+  mkdirSync(join(target, 'ornelyon-task-history.removing-1'));
+  assert.ok(planInstall(target).filter((p) => p.action === 'LEFTOVER').length === 2, 'a half-finished removal is reported too');
+  rmSync(join(target, 'ornelyon-task-history.removing-1'), { recursive: true });
   applyRemove(target);
   assert.deepEqual(readdirSync(target), ['.ornelyon-task-history.tmp-abc123'], 'only the leftover remains');
 });
