@@ -116,3 +116,10 @@ Register again (same commands as `--print-config`, name `ornelyon-phase1-test`, 
 | `Failed to connect` / `connection closed: initialize response` | `cli.js` path missing (moved folder, no build) or the process exits at start | Run `node dist/interface/cli.js mcp --self-test` with the same arguments; if the path moved or was rebuilt elsewhere, run `--print-config` and register again |
 | Tools missing in an already-open session | Servers are read when a session starts | Start a new session |
 | New task not visible | Scope is a start-time snapshot | Restart the server (new session) or use `--allow-task` |
+
+## Second run (after the history clean-up)
+
+- Git: the two Phase 1 commits that had a user-specific path in their diff were replaced by one commit with the same final tree (`git diff` between old and new HEAD is empty); the dev branch was updated with `--force-with-lease` against the expected remote head. `main` and tags were not touched. The old objects may still be reachable on GitHub by their SHA or in caches; deletion there is not claimed.
+- Re-registered `ornelyon-phase1-test` in Claude Code (user scope) and Codex with the same synthetic task. Claude `mcp list`: Connected. Codex 0.166.0 engine, scratch config: 6 tools, all read-only; broken-path and instant-exit entries failed as before. Existing servers unchanged (Codex 7 plus the test entry, Claude 2 plus the test entry).
+- Attaching to the live Codex app's app-server through `codex app-server proxy` did not answer `initialize` within 25 s (INCONCLUSIVE; not pursued, so it says nothing about what the app window shows).
+- GUI windows: NOT operated. The Codex app permission was declined earlier and was not requested again; the Claude desktop app cannot be operated by this session. **The test registration was left in place on purpose so that the manual checklist above can be run.** Remove it afterwards with the two `remove` commands.

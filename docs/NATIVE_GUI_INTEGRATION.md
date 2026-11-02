@@ -65,6 +65,8 @@ To check a GUI yourself after registering: open a new session, ask it to list it
 
 ## Backlog for v0.6.0 and later
 
+The current order, based on Single-Agent First, is in [DEVELOPMENT_PLAN.md](DEVELOPMENT_PLAN.md); the list below is the earlier, unordered version.
+
 Ordered roughly by value. Each item that adds capability needs its own security review first.
 
 1. Live GUI verification checklist run by a person on the Codex app and the Claude desktop app, recorded as evidence (turns NOT_TESTED into PASS or FAIL).
