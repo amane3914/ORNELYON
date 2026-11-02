@@ -58,6 +58,8 @@ for (const file of [
   'docs/NATIVE_GUI_INTEGRATION.md',
   'docs/PHASE1_GUI_VERIFICATION.md',
   'docs/DEVELOPMENT_PLAN.md',
+  'docs/DYNAMIC_SCOPE_DESIGN.md',
+  'docs/WORKSPACE_IDENTITY.md',
 ]) {
   if (!existsSync(join(root, file))) {
     throw new Error(`Missing packaged file: ${file}`);

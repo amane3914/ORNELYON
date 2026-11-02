@@ -6,6 +6,7 @@ import { loadConfig, saveConfig, type AgentKey, type ToolState } from '../core/c
 import { configPath, dataDir, packageRoot } from '../core/paths.js';
 import { MCP_TOOL_NAMES, registrationHelp, serveStdio } from './mcp.js';
 import { selfTest } from './mcp-selftest.js';
+import { diagnoseMcp } from './doctor.js';
 import { cmdBenchmark } from './cli-benchmark.js';
 import { readRecords } from '../core/history.js';
 import { setToolState, TOOL_STATES } from '../optimization/dormancy.js';
@@ -40,7 +41,8 @@ const USAGE = `ORNELYON
 
 Usage:
   ornelyon gui [--port N]                 Start the local setup and dashboard (127.0.0.1 only)
-  ornelyon doctor                         Check runtime, agents, sign-in state and setup checks
+  ornelyon doctor [--name <entry>] [--probe-registration]
+                                          Diagnose setup and MCP registration. --probe-registration may launch named Claude MCP servers; off by default.
   ornelyon run "<prompt>" [options]       Run one task. Prints the result and its evidence.
       --agent codex|claude|local          Agent to use (L1 manual mode, or the main agent)
       --kind <label>                      Task category for routing, e.g. code
@@ -111,7 +113,7 @@ function flagAll(args: string[], name: string): string[] {
 }
 
 /** Flags that take no value. Every other `--flag` consumes the next argument. */
-const BOOLEAN_FLAGS = new Set(['--allow-write', '--yes', '--require-review', '--dry-run', '--override', '--accept-current-state', '--preview', '--expose-content', '--print-config', '--json']);
+const BOOLEAN_FLAGS = new Set(['--allow-write', '--yes', '--require-review', '--dry-run', '--override', '--accept-current-state', '--preview', '--expose-content', '--print-config', '--json', '--probe-registration']);
 
 function positional(args: string[]): string[] {
   const out: string[] = [];
@@ -127,7 +129,7 @@ function positional(args: string[]): string[] {
   return out;
 }
 
-async function cmdDoctor(): Promise<number> {
+async function cmdDoctor(args: string[]): Promise<number> {
   const loaded = loadConfig();
   const det = await detectAgents(loaded.config, true);
   const checks = runSetupChecks(loaded.config, det);
@@ -144,7 +146,19 @@ async function cmdDoctor(): Promise<number> {
     console.log(`[${mark}] ${c.label}: ${c.detail}${c.fix ? `\n       fix: ${c.fix}` : ''}`);
   }
   console.log(setupCanComplete(checks) ? 'Setup can be completed.' : 'Setup has errors. Fix them in `ornelyon gui`.');
-  return setupCanComplete(checks) ? 0 : 1;
+  // A Claude registration probe may launch arbitrary configured commands; it requires explicit opt-in.
+  const probeRegistration = args.includes('--probe-registration');
+  if (probeRegistration) {
+    console.log('WARNING: --probe-registration may launch the registered Claude MCP server command.');
+  }
+  const mcp = await diagnoseMcp(fileURLToPath(import.meta.url), loaded.config, ['ornelyon', ...flagAll(args, '--name')], undefined, probeRegistration);
+  console.log('\nORNELYON MCP / GUI integration (diagnosis only, nothing is changed):');
+  for (const i of mcp) {
+    console.log(`[${i.status.padEnd(10)}] ${i.label}: ${i.detail}${i.fix ? `\n             fix: ${i.fix}` : ''}`);
+  }
+  const mcpFailed = mcp.some((i) => i.status === 'FAIL');
+  console.log(mcpFailed ? 'MCP integration has FAIL items (see the fix lines).' : 'No MCP integration failure found. UNKNOWN and NOT_TESTED items were not verified.');
+  return setupCanComplete(checks) && !mcpFailed ? 0 : 1;
 }
 
 /** Parse the verification flags. A `:sha256` suffix pins the exact content that was reviewed. */
@@ -633,7 +647,7 @@ async function main(): Promise<number> {
     case 'gui':
       return cmdGui(rest);
     case 'doctor':
-      return cmdDoctor();
+      return cmdDoctor(rest);
     case 'run':
       return cmdRun(rest);
     case 'history':

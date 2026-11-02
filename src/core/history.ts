@@ -58,6 +58,11 @@ export interface RunRecord {
    * older history and for adapters that do not declare it: both mean "unknown", never "real".
    */
   origin?: Provenance;
+  /**
+   * Added in v0.6.0 on summary records: a label of the folder the task ran in (core/workspace-id.ts). Absent in older
+   * history, which means UNKNOWN and is never filled in later. A label is not a permission.
+   */
+  workspace?: string;
   /** Added in v0.2. The contract the call was made under. Objective is redacted on write. */
   contract?: DelegationContract;
 }

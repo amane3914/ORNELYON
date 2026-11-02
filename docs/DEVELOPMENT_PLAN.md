@@ -1,6 +1,6 @@
-# Development policy and plan after v0.5.0 Phase 1
+# ORNELYON development status and roadmap
 
-Planning only. Nothing in this file is implemented. Version stays 0.4.2 until the owner decides otherwise.
+This document distinguishes implemented features from plans. Development branch: v0.6.0 Phase 0/1; package version remains **0.4.2** until the owner approves a release. A merged branch is not itself a released version.
 
 ## Principles
 
@@ -8,21 +8,24 @@ Planning only. Nothing in this file is implemented. Version stays 0.4.2 until th
 2. **Multi-Agent Optional.** Review, delegation and handoff between agents stay available but off by default, and never limit what a single agent can do.
 3. **Native-GUI First.** The official Codex and Claude Code GUIs are the main place of use. The ORNELYON WebUI stays an optional page for setup, administration and diagnosis. New features live in the Core / Service layer (`src/core`, `src/interface/service.ts`) so that the CLI, the WebUI and MCP share one implementation.
 
-## Where things stand (v0.4.2 plus the Phase 0/1 branch)
+## Implemented and verified status (2026-11-02)
 
-Read-only MCP (6 tools), `--print-config`, `--self-test`. Connection checked with the Claude Code CLI and the Codex engine without a model call. Not yet checked: the two GUI windows, GUI restart, any tool call inside a model turn (see [PHASE1_GUI_VERIFICATION.md](PHASE1_GUI_VERIFICATION.md)).
+- **v0.5.0 integration baseline (already merged to main):** read-only MCP (6 tools), `--print-config`, `--self-test`, Claude Code CLI and Codex engine protocol checks without a model call. Owner confirmed **Codex app GUI registration display only**. Codex GUI tool detail view, Claude Desktop Code-tab MCP use, restarts, and model-mediated invocations remain **NOT_TESTED**; see [PHASE1_GUI_VERIFICATION.md](PHASE1_GUI_VERIFICATION.md).
+- **v0.6.0 Phase 0/1 (development branch, not released):** scope-limited history filters, evidence gaps / verification, passport continuation assessment, `doctor` registration diagnostics, `NO_FINAL_RECORD` lists, resume-preview status, and workspace identity labels. Dynamic MCP scope is **HOLD**, not implemented; see [DYNAMIC_SCOPE_DESIGN.md](DYNAMIC_SCOPE_DESIGN.md).
+- **Safety boundary:** doctor does **not** invoke `claude mcp get` by default, because it may launch an arbitrary registered MCP server. `doctor --probe-registration` is an explicit opt-in and can start named registrations; use only after inspecting and trusting them. The built-in isolated MCP self-test does not invoke an agent.
 
-## Proposed order
+## Roadmap
 
-| Step | Content | Why now | Needs before starting |
-| --- | --- | --- | --- |
-| v0.5.0 close-out | Manual GUI checks (display, restart, one optional tool call), then record them | The Native-GUI claim rests on them | A person at both GUIs |
-| v0.6.0 | **Single-agent value through MCP, still read-only:** Evidence Gate result for the *current* work (not only saved tasks), Task History search, Task Passport read for resume. Scope that follows live history by explicit rule instead of a start-time snapshot | Makes the GUI useful for one agent with no write risk | Scope design that does not widen access by default |
-| v0.6.x | Session management and recovery: list interrupted tasks, show what a resume would carry (the passport and handoff preview already exist), diagnose a broken registration (`doctor` that compares registered paths with the build) | Recovery is a single-agent need | None beyond v0.6.0 |
-| v0.7.0 | **Safe Hooks / Skills integration:** a Claude Code hook or Codex skill that calls the *read-only* tools (for example "show Evidence before I say done"). Packaging as a plugin | One-step setup, guidance on treating returned text as data | A review of what hook output can inject into the model |
-| v0.8.0+ | **Action tools over MCP** (record accept/reject, start a task), only after the design below is agreed and reviewed | Highest risk, so last | The design below |
-| Anytime, optional | Multi-agent: turn on review/handoff when the owner enables it; keep documentation honest that only Claude Code to Claude Code was run for real | Keeps the optional promise | Real Codex runs, which are paid and need approval |
-| Anytime | MCP 2026-07-28 revision (`server/discover`, result types, caching hints) once checked against the specification; HTTP transport on loopback with a token; macOS / Linux verification | Compatibility | Spec check; token handling design |
+| Milestone | Status | Scope / remaining condition |
+| --- | --- | --- |
+| v0.5.0 native-GUI baseline | **Implemented, partially verified** | Manual Claude Desktop GUI recognition, Codex GUI tools and model-mediated calls remain unverified; no such test is authorized by this plan. |
+| v0.6.0 Phase 0: single-agent reads | **Implemented on branch** | Evidence, history filtering and Passport read for *ORNELYON-recorded* tasks only; not automatic capture of native-GUI work. |
+| v0.6.0 Phase 1: doctor and recovery | **Implemented on branch** | Diagnostic checks, NO_FINAL_RECORD and resume previews. A missing final record is not proof of interruption; no automatic restart. |
+| Dynamic MCP task scope | **HOLD** | Workspace labels are neither authorization nor caller identity. Static scope and content-off default remain unchanged. |
+| v0.7.0 read-only Hooks / Skills | **PLANNED** | Design and review prompt-injection boundaries before enabling hooks or packaging plugins. |
+| v0.8.0+ MCP action tools | **PLANNED** | Require explicit per-call approval, authorization, audit, caps and a verified identity / trust model. |
+| MCP 2026-07-28 and other clients | **PLANNED / NOT_TESTED** | Verify spec, transports and real GUI behavior before claims of compatibility. |
+| Optional multi-agent | **Existing, partially verified** | Real Codex cross-agent paths and subscription automation terms remain unconfirmed. |
 
 ## Design that must exist before any action tool
 
@@ -43,3 +46,7 @@ An action tool is a tool that writes, starts an agent or records a decision. Non
 - Registrations hold absolute paths and break when the folder moves.
 - Whether automated use under a subscription sign-in is allowed is NOT CONFIRMED.
 - Version, tag and release decisions belong to the owner.
+
+## Release boundary
+
+All v0.6.0 features above are development work until separately merged and released. Keep the package version at 0.4.2 and do not create a tag or public Release merely because tests or a pull request pass. **Do not claim full native-GUI integration**: only Codex app registration display has been observed; Claude Desktop Code-tab behavior and tool invocations remain NOT_TESTED.

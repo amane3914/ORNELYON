@@ -2,7 +2,7 @@
 
 A small, local harness that lets you run tasks through **OpenAI Codex**, **Claude Code** or a **local OpenAI-compatible LLM** from one setup screen and one command. It is independent of, and not affiliated with, endorsed by or sponsored by, OpenAI, Google, Microsoft or Anthropic. Read [Accounts, billing and provider terms](#accounts-billing-and-provider-terms) before you use a Codex or Claude Code sign-in.
 
-> Status: **Public Preview** (v0.4.2). It is not a stable release, and nothing in it is guaranteed beyond what is described below. 288 offline tests pass (fake adapters, a localhost fake model, hand-built history and the official MCP SDK client, no paid calls). Real Claude Code runs so far: read-only tasks and read-only Claude Code to Claude Code handoffs (v0.3.0, v0.3.1, and one of each again on the v0.4.2 build). **v0.4.0 and v0.4.1 added no real-agent run. v0.4.2 ran two real Claude Code calls (one read-only task and one Claude Code to Claude Code handoff, 2026-11-02) and no real Codex call.** The Efficiency Benchmark has only been checked on hand-built, synthetic and fake-adapter history, so it says nothing yet about real token or cost savings. Real file edits, real failures, any real Codex task (including any handoff with Codex), other operating systems and a live connection from Claude Code or Codex to the MCP server were **not** run (by policy, no paid or metered agent call is used to test v0.4.1 or v0.4.2; these paths are NOT_TESTED, not verified). See [IMPLEMENTATION_REPORT.md](IMPLEMENTATION_REPORT.md) sections 13 to 17.
+> Status: **Public Preview** (v0.4.2). It is not a stable release, and nothing in it is guaranteed beyond what is described below. 310 offline tests pass (fake adapters, a localhost fake model, hand-built history and the official MCP SDK client, no paid calls). Real Claude Code runs so far: read-only tasks and read-only Claude Code to Claude Code handoffs (v0.3.0, v0.3.1, and one of each again on the v0.4.2 build). **v0.4.0 and v0.4.1 added no real-agent run. v0.4.2 ran two real Claude Code calls (one read-only task and one Claude Code to Claude Code handoff, 2026-11-02) and no real Codex call.** The Efficiency Benchmark has only been checked on hand-built, synthetic and fake-adapter history, so it says nothing yet about real token or cost savings. Real file edits, real failures, any real Codex task (including any handoff with Codex), other operating systems and a live connection from Claude Code or Codex to the MCP server were **not** run (by policy, no paid or metered agent call is used to test v0.4.1 or v0.4.2; these paths are NOT_TESTED, not verified). See [IMPLEMENTATION_REPORT.md](IMPLEMENTATION_REPORT.md) sections 13 to 17.
 
 ## What ORNELYON does
 
@@ -28,7 +28,7 @@ This is the first public preview. The table says what was checked and what was n
 
 | Item | Status |
 | --- | --- |
-| Windows 11 with Node.js 24: `npm test` (288 offline tests), build, packaging, launch | Verified by the maintainer on a local machine |
+| Windows 11 with Node.js 24: `npm test` (310 offline tests), build, packaging, launch | Verified by the maintainer on a local machine |
 | Node.js 20, macOS, Linux | **Not verified on real machines.** A CI workflow (`.github/workflows/ci.yml`) is in the repository; it has not been run yet |
 | Real Claude Code runs | Read-only tasks and read-only Claude Code to Claude Code handoffs: v0.3.0 and v0.3.1, and one of each again on the v0.4.2 build (2026-11-02, Claude Code 2.1.311, subscription sign-in, 2 calls, both succeeded). **No real-agent run for v0.4.0 or v0.4.1** |
 | Real Codex task | NOT_TESTED (not run in v0.4.2 either; an earlier check on the maintainer's Windows machine was BLOCKED by the Codex sandbox setup) |
@@ -78,6 +78,8 @@ node dist/interface/cli.js history
 node dist/interface/cli.js cost
 node dist/interface/cli.js tool WebFetch DORMANT
 ```
+
+**MCP diagnosis safety:** `doctor` does not invoke `claude mcp get` by default, because that command may start the configured MCP server. Only use `node dist/interface/cli.js doctor --probe-registration` after you trust the registered ORNELYON-named command. This opt-in does not guarantee that the configured command is safe. Repairs are never applied automatically.
 
 ## Install presets
 
@@ -262,11 +264,13 @@ API: `POST /api/handoffs/preview` (same fields as `/api/handoffs` without `confi
 | Tool | Answers |
 | --- | --- |
 | `ornelyon_status` | Which agents are enabled, installed and signed in; main settings and limits |
-| `ornelyon_recent_tasks` | Tasks **in scope** with agent, kind, Execution / Verification / Acceptance (no prompts or outputs) |
+| `ornelyon_recent_tasks` | Search the tasks **in scope**, newest first: filters `taskId`, `agent`, `execution`, `verification`, `decision`; each row has agent, kind, Execution / Verification / Acceptance and whether a passport file is present (no prompts or outputs) |
 | `ornelyon_dispatch_preview` | What Smart Dispatch would decide (same function as `run --dry-run` and `POST /api/dispatch/plan`) |
-| `ornelyon_evidence` | Evidence Gate result of one task in scope, check by check |
-| `ornelyon_passport` | Saved Task Passport of one task in scope and what a handoff to each agent would do |
+| `ornelyon_evidence` | Evidence Gate result of one task in scope, check by check, with `evidenceRecorded`, `verifiedByOrnelyon` (false when the record is missing, history was unreadable, any check is not PASS, or the user rejected the task; check names and details need `--expose-content`), the list of `gaps`, the adapter provenance and the failure kind. A task that is not in ORNELYON's history is never reported as verified |
+| `ornelyon_passport` | Saved Task Passport of one task in scope, a `continuation` assessment (CLEAR / CAUTION / BLOCKED with reasons, stale-passport and changed-file checks; read-only, not an approval) and what a handoff to each agent would do |
 | `ornelyon_handoff_preview` | Size, hash, report state and file states of the handoff context. The text only in content mode |
+
+**v0.6.0 Phase 0 (development branch):** the three tools above were extended; no tool was added, the scope rules are unchanged, and a scope that follows new tasks was reviewed and **not** implemented ([docs/DYNAMIC_SCOPE_DESIGN.md](docs/DYNAMIC_SCOPE_DESIGN.md)).
 
 **What it cannot do:** start an agent, run a handoff, record accept or reject, or change settings, history or passports. No such tool exists, no tool accepts a path, command, setting or confirmation, and extra arguments are refused. It is not a way around the Codex sandbox.
 

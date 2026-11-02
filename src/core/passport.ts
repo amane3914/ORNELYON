@@ -684,6 +684,11 @@ export function savePassport(passport: TaskPassport): string {
   return file;
 }
 
+/** Whether a passport file is present for the task. Presence only: it is not read, and `loadPassport` is what checks integrity. */
+export function passportFilePresent(groupId: string): boolean {
+  return existsSync(passportPath(groupId));
+}
+
 export function loadPassport(groupId: string): { passport: TaskPassport | null; check: PassportCheck } {
   const file = passportPath(groupId);
   if (!existsSync(file)) {
