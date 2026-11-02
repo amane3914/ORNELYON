@@ -897,3 +897,7 @@ No server or tool change. Added `scripts/codex-mcp-probe.mjs` (developer script,
 ### 19.2 Phase 1 second run and plan
 
 History: two commits with a user-specific path replaced by one commit of the same tree (force-with-lease on the dev branch only; old objects may persist on GitHub). Re-registration and connection checks repeated with the same results. GUI windows still not operated (BLOCKED); registration left in place for the manual checklist. `docs/DEVELOPMENT_PLAN.md` records the Single-Agent First / Multi-Agent Optional / Native-GUI First policy and the v0.6.0+ order; no feature was implemented. Tests 288/288; zip extraction, links, self-test and personal-data scan clean (51 files).
+
+## 20. ORNELYON v0.6.0 Phase 0 (Single-Agent Core Enhancement; branch feat/v0.6.0-single-agent, version still 0.4.2)
+
+Base: main 0766118. Core: `evidenceGaps` (core/evidence.ts), `passportSaved` (core/passport.ts). Service: `recentTasks` takes an optional filter (agent, execution, verification, decision, taskId, scope predicate applied before the limit), `evidenceFor` reports whether a record exists, `continuationAssessment`. MCP: `ornelyon_recent_tasks`, `ornelyon_evidence` and `ornelyon_passport` extended; no tool added, read-only and scope rules unchanged (the filter argument is named `decision` because the existing guard test forbids arguments named accept). A scope that follows new tasks was reviewed and held (docs/DYNAMIC_SCOPE_DESIGN.md). Tests: 293 pass (5 new). Synthetic data only; no agent was started.
