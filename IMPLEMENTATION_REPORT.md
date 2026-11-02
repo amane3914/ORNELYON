@@ -912,3 +912,7 @@ Independent review (a Claude Code subagent, read-only) found 7 issues, none high
 - **Dynamic scope**: re-evaluated with the label available and held again; the label does not discriminate while there is one global workspace (docs/DYNAMIC_SCOPE_DESIGN.md).
 - **Output**: a test fixes that each tool answers under 9,000 characters (the 20-row listing under 7,000), gives identical text on repeat, and shows no local path or workspace label.
 - **Not verified**: official GUI windows (see docs/PHASE1_GUI_VERIFICATION.md); real agent runs; behaviour on a very large real history beyond the synthetic scans in the tests.
+
+## 22. ORNELYON v0.7.0 Phase 0 (Native Skills & Safe Hooks; branch feat/v0.7.0-native-integration, version still 0.4.2)
+
+Base: main ba03107. Added three Agent Skills (integrations/skills: evidence check, task history, resume preview) that only name the existing read-only MCP tools; `ornelyon skills list|install|remove` (dry run unless --apply, never overwrites or deletes a folder it did not write or that has extra files); an opt-in Claude Code Stop-hook helper (`ornelyon hook stop`, `ornelyon hooks print`) that emits only a user-facing systemMessage, never blocks and keeps no state. No MCP tool was added; scope, content gating and read-only rules are unchanged. Codex hooks and PreToolUse/PostToolUse hooks are held. Tests: 325 pass. Not verified: loading of the skills by Codex or Claude Code, firing of the hook by Claude Code, the `args` field of the hook entry, any Codex skills folder. See docs/NATIVE_SKILLS_AND_HOOKS.md.
